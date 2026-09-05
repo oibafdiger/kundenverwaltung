@@ -212,3 +212,7 @@ Keine Persistenz, keine Nebenläufigkeit, keine Benutzeroberfläche. Die
 Kundennummern kommen aus einem Klassenzähler und sind nicht prozessübergreifend
 eindeutig. Für eine echte Anwendung fehlt die Datenschicht — die kommt im
 nächsten Abschnitt des Lernwegs.
+
+## Lizenz
+
+MIT — siehe [LICENSE](LICENSE).
