@@ -2,7 +2,12 @@
 
 import pytest
 
-from kundenverwaltung import Kunde, Kundenliste, KundenlisteIterator
+from kundenverwaltung import (
+    Kunde,
+    KundeNichtGefundenError,
+    Kundenliste,
+    KundenlisteIterator,
+)
 
 
 # --- Aufbau ----------------------------------------------------------------
@@ -88,6 +93,30 @@ def test_in_mit_fremdtyp_liefert_false(kundenliste: Kundenliste, fremd: object) 
     keinen Spiegelpartner, und der Rueckgabewert laeuft durch bool() —
     bool(NotImplemented) ist True."""
     assert (fremd in kundenliste) is False
+
+
+# --- Suche -----------------------------------------------------------------
+
+def test_finde_liefert_den_kunden_mit_der_nummer(kundenliste: Kundenliste) -> None:
+    gesucht = kundenliste[1]
+    assert kundenliste.finde(gesucht.nummer) is gesucht
+
+
+def test_finde_wirft_wenn_die_nummer_fehlt(kundenliste: Kundenliste) -> None:
+    """Werfen statt None zurueckgeben: Wer eine Nummer nachschlaegt, erwartet
+    einen Kunden. Ein None waere ein zweiter Rueckgabetyp, den jeder Aufrufer
+    abfangen muesste — und wer es vergisst, bekommt den Fehler spaeter als
+    AttributeError an ganz anderer Stelle."""
+    with pytest.raises(KundeNichtGefundenError) as info:
+        kundenliste.finde(999_999)
+    assert "999999" in str(info.value), "die Meldung nennt die gesuchte Nummer"
+    assert "3" in str(info.value), "und wie viele Eintraege durchsucht wurden"
+
+
+def test_wer_nur_pruefen_will_nimmt_in(kundenliste: Kundenliste) -> None:
+    """`in` ist die fehlerfreie Variante fuer die Frage OB, finde() fuer WELCHER."""
+    assert (kundenliste[0] in kundenliste) is True
+    assert (Kunde("Fremd", "fremd@example.de") in kundenliste) is False
 
 
 # --- Slicing ---------------------------------------------------------------

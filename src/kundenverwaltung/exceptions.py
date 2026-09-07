@@ -3,6 +3,7 @@
 Eine Basisklasse, sechs Unterklassen, keine Zwischenebene. Wer
 KundenverwaltungError faengt, faengt alles aus diesem Paket — und nur das."""
 
+
 class KundenverwaltungError(Exception):
     """Basis aller fachlichen Fehler der Kundenverwaltung.
 
@@ -22,9 +23,8 @@ class KundenverwaltungError(Exception):
 class KundeNichtGefundenError(KundenverwaltungError):
     """Unter der gesuchten Kundennummer existiert kein Kunde.
 
-    Noch ohne Wurfstelle: Eine Suche nach Kundennummer gibt es im Projekt
-    bisher nicht. Vorgesehen fuer Kundenliste.finde(nummer) im Lauf dieser
-    Woche. Bis dahin ist die Klasse eine Zusage, kein Werkzeug.
+    Wurfstelle: Kundenliste.finde(nummer). Wer nur wissen will, OB ein Kunde
+    enthalten ist, nimmt stattdessen `in` — dann faellt kein Fehler an.
     """
 
 
@@ -77,25 +77,3 @@ class CsvFormatError(KundenverwaltungError):
     email-Setter kommt. Wer wirklich jede kaputte Zeile abfangen will, faengt
     KundenverwaltungError.
     """
-
-
-# Zuordnung der bestehenden Wurfstellen — Umbau am Dienstag:
-#
-#   InfoLieferant.erzeugt   unbekannter Schluessel  ->  UnbekannteKomponenteError
-#   aus_csv_zeile           falsche Feldanzahl      ->  CsvFormatError
-#   aus_csv_zeile           Umsatz keine Zahl       ->  CsvFormatError
-#   email-Setter            ungueltige Email        ->  UngueltigeEmailError
-#   umsatz-Setter           negativer Betrag        ->  UngueltigerBetragError
-#   aktiv-Setter            kein bool               ->  TypeError  (siehe unten)
-#
-# Der aktiv-Setter prueft mit isinstance den TYP, nicht den Wert. Python
-# trennt das: falscher Typ -> TypeError, richtiger Typ mit unzulaessigem Wert
-# -> ValueError. `aktiv = "ja"` ist ein Programmierfehler am Aufrufort, kein
-# Fachfehler der Kundenverwaltung — die Stelle gehoert deshalb NICHT in diese
-# Hierarchie. Nicht jeder Fehler ist ein Fachfehler.
-#
-# Kein Miterben von ValueError: Die Unterklassen erben ausschliesslich von
-# KundenverwaltungError, damit die Hierarchie die einzige Wahrheit ist. Preis
-# dafuer sind die `except ValueError`-Stellen in test_kunde.py, die am
-# Dienstag mitgezogen werden muessen — was ohnehin gut ist, weil jeder Test
-# dann benennt, welchen Fehler er genau erwartet.

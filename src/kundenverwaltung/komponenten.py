@@ -28,13 +28,14 @@ class InfoLieferant(ABC):
 
     @classmethod
     def erzeugt(cls, key: str, *args: Any, **kwargs: Any) -> "InfoLieferant":
-        try:                                  
+        try:
             klasse = cls.registry[key]
         except KeyError:
             raise UnbekannteKomponenteError(
                 f"Unbekannte Komponente: {key!r}. Bekannt: {sorted(cls.registry)}"
             ) from None
         return klasse(*args, **kwargs)
+
 
 @runtime_checkable
 class InfoFaehig(Protocol):
@@ -44,6 +45,7 @@ class InfoFaehig(Protocol):
     ausserhalb des ABC-Vertrags stehen."""
 
     def info(self) -> str: ...
+
 
 class PrivatDaten(InfoLieferant, key="privat"):
 

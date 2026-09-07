@@ -9,7 +9,13 @@ from .exceptions import (
     UngueltigerBetragError,
     UngueltigerNameError,
 )
-from .komponenten import Adresse, GeschaeftsDaten, GrosskundenDaten, InfoFaehig, PrivatDaten
+from .komponenten import (
+    Adresse,
+    GeschaeftsDaten,
+    GrosskundenDaten,
+    InfoFaehig,
+    PrivatDaten,
+)
 
 
 class ExportierbarMixin:
@@ -30,6 +36,7 @@ class ExportierbarMixin:
 
     def als_csv(self) -> str:
         return f"{self.name},{self.email},{self.umsatz}"
+
 
 @total_ordering
 class Kunde(ExportierbarMixin):
@@ -164,7 +171,7 @@ class Kunde(ExportierbarMixin):
         if "." not in domain:
             return False
 
-        if domain.split(".")[-1].__len__() < 2:
+        if len(domain.split(".")[-1]) < 2:
             return False
 
         return True
@@ -224,8 +231,8 @@ class Kunde(ExportierbarMixin):
         laeuft also nur einmal.
 
         Folge: Der Wert altert. Aendert sich der Umsatz nach dem ersten
-        Zugriff, bleibt der Score stehen. Fuer eine Kennzahl, die pro
-        Sitzung einmal gebraucht wird, ist das gewollt.
+        Zugriff, bleibt der Score stehen. Belegen laesst sich das Caching
+        ueber __dict__ statt ueber eine Stoppuhr.
         """
         score = 0.0
         if not self.aktiv:
@@ -317,7 +324,7 @@ class Kunde(ExportierbarMixin):
         if not isinstance(other, Kunde):
             return NotImplemented
         return self.nummer == other.nummer
-        
+
 
     def __hash__(self) -> int:
         """Hash konsistent zu __eq__ — beide stuetzen sich auf nummer.

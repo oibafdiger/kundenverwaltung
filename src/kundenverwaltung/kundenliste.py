@@ -3,6 +3,7 @@
 from collections.abc import Iterator
 from typing import overload
 
+from .exceptions import KundeNichtGefundenError
 from .kunde import Kunde
 
 
@@ -37,6 +38,28 @@ class Kundenliste:
         Komposition verhindern.
         """
         self._kunden.append(kunde)
+
+    def finde(self, nummer: int) -> Kunde:
+        """Sucht den Kunden mit der angegebenen Nummer.
+
+        Wirft KundeNichtGefundenError, wenn keiner passt — die Klasse hatte
+        seit Woche 7 keine Wurfstelle und war damit ein Versprechen, das der
+        Code nicht einloest.
+
+        Entscheidung: werfen statt None zurueckgeben. Wer eine Nummer
+        nachschlaegt, erwartet einen Kunden. Ein None waere ein zweiter
+        Rueckgabetyp, den jeder Aufrufer abfangen muesste — und wer es
+        vergisst, bekommt den Fehler erst spaeter als AttributeError an ganz
+        anderer Stelle. Wer nur wissen will, OB es den Kunden gibt, nimmt
+        stattdessen `in`.
+        """
+        for kunde in self._kunden:
+            if kunde.nummer == nummer:
+                return kunde
+        raise KundeNichtGefundenError(
+            f"Keine Kundennummer {nummer!r} in dieser Liste "
+            f"({len(self._kunden)} Eintraege)"
+        )
 
     def __len__(self) -> int:
         return len(self._kunden)
@@ -124,6 +147,7 @@ class Kundenliste:
 
     def __repr__(self) -> str:
         return f"Kundenliste({self._kunden!r})"
+
 
 class KundenlisteIterator:
     """Haelt die Position beim Durchlaufen einer Kundenliste.
