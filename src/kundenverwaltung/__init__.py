@@ -25,6 +25,7 @@ from .komponenten import (
 from .csv_format import KundenCsv
 from .kunde import Kunde
 from .kundenliste import Kundenliste, KundenlisteIterator
+from .validierung import email_gueltig
 from .protokoll import Fehlerprotokoll
 
 __all__ = [
@@ -47,4 +48,5 @@ __all__ = [
     "UngueltigeEmailError",
     "UngueltigerBetragError",
     "UngueltigerNameError",
+    "email_gueltig",
 ]

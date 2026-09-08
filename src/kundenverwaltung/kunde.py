@@ -14,6 +14,7 @@ from .komponenten import (
     InfoFaehig,
     PrivatDaten,
 )
+from .validierung import email_gueltig
 
 
 @total_ordering
@@ -52,32 +53,6 @@ class Kunde:
 
 
     # ------------------------------------------------------------------
-    # Statische Methoden (Utility-Funktionen)
-    # ------------------------------------------------------------------
-    @staticmethod
-    def email_gueltig(email: str) -> bool:
-        """Prüft, ob email alle nötigen Elemente besitzt"""
-        if "@" not in email:
-            return False
-
-        teile = email.split("@")
-        if len(teile) != 2:
-            return False
-
-        lokaler_teil, domain = teile
-
-        if len(lokaler_teil) < 1:
-            return False
-
-        if "." not in domain:
-            return False
-
-        if len(domain.split(".")[-1]) < 2:
-            return False
-
-        return True
-
-    # ------------------------------------------------------------------
     # Properties (Getter/Setter)
     # ------------------------------------------------------------------
     @property
@@ -86,7 +61,7 @@ class Kunde:
 
     @email.setter
     def email(self, wert: str) -> None:
-        if not Kunde.email_gueltig(wert):
+        if not email_gueltig(wert):
             raise UngueltigeEmailError(f"Ungültige E-Mail: {wert}")
         self._email = wert
 

@@ -11,6 +11,7 @@ from kundenverwaltung import (
     KundenCsv,
     Kundenliste,
     KundenverwaltungError,
+    email_gueltig,
     PrivatDaten,
     UngueltigeEmailError,
 )
@@ -258,3 +259,34 @@ def test_als_zeile_schreibt_das_gelesene_format(kunde: Kunde) -> None:
     zeile = KundenCsv.als_zeile(kunde)
     assert zeile == f"{kunde.name};{kunde.email};1500.0"
     assert KundenCsv.aus_zeile(zeile).umsatz == 1500.0
+
+
+# --- Email-Pruefung als eigenstaendige Funktion ----------------------------
+
+@pytest.mark.parametrize(
+    "email",
+    ["anna@example.de", "a@b.co", "vor.nach@firma.example.com"],
+)
+def test_gueltige_adressen(email: str) -> None:
+    assert email_gueltig(email) is True
+
+
+@pytest.mark.parametrize(
+    ("email", "grund"),
+    [
+        ("ohne-at", "kein @"),
+        ("@example.de", "kein lokaler Teil"),
+        ("zwei@@example.de", "zwei @"),
+        ("anna@ohnepunkt", "kein Punkt in der Domain"),
+        ("anna@example.d", "Top-Level-Domain zu kurz"),
+    ],
+)
+def test_ungueltige_adressen(email: str, grund: str) -> None:
+    assert email_gueltig(email) is False, f"haette an '{grund}' scheitern muessen"
+
+
+def test_pruefung_braucht_keinen_kunden() -> None:
+    """Der Grund fuer die Herausloesung: Die Funktion arbeitet auf einem
+    String, nicht auf einem Objekt. Man kann pruefen, BEVOR man baut."""
+    if email_gueltig("neu@example.de"):
+        Kunde("Neu", "neu@example.de")
