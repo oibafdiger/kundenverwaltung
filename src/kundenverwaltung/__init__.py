@@ -22,20 +22,21 @@ from .komponenten import (
     Notiz,
     PrivatDaten,
 )
-from .kunde import ExportierbarMixin, Kunde
+from .csv_format import KundenCsv
+from .kunde import Kunde
 from .kundenliste import Kundenliste, KundenlisteIterator
 from .protokoll import Fehlerprotokoll
 
 __all__ = [
     "Adresse",
     "CsvFormatError",
-    "ExportierbarMixin",
     "Fehlerprotokoll",
     "GeschaeftsDaten",
     "GrosskundenDaten",
     "InfoFaehig",
     "InfoLieferant",
     "Kunde",
+    "KundenCsv",
     "KundeNichtGefundenError",
     "Kundenliste",
     "KundenlisteIterator",

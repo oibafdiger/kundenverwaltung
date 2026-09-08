@@ -8,6 +8,7 @@ from kundenverwaltung import (
     CsvFormatError,
     GeschaeftsDaten,
     Kunde,
+    KundenCsv,
     Kundenliste,
     KundenverwaltungError,
     PrivatDaten,
@@ -179,21 +180,21 @@ def test_ordnungsvergleich_mit_fremdtyp_wirft(kunde: Kunde, operator: str) -> No
 # --- CSV -------------------------------------------------------------------
 
 def test_aus_csv_zeile_liest_eine_gueltige_zeile() -> None:
-    gelesen = Kunde.aus_csv_zeile("Anna;anna@example.de;5000")
+    gelesen = KundenCsv.aus_zeile("Anna;anna@example.de;5000")
     assert gelesen.name == "Anna"
     assert gelesen.umsatz == 5000.0
 
 
 def test_kunden_aus_datei_ueberspringt_kaputte_zeilen(beispiel_csv: Path) -> None:
     """Eine kaputte Zeile darf nicht die ganze Datei scheitern lassen."""
-    eingelesen = Kunde.kunden_aus_datei(str(beispiel_csv))
+    eingelesen = KundenCsv.aus_datei(str(beispiel_csv))
     assert [k.name for k in eingelesen] == ["Anna", "Bob", "Dora"]
 
 
 def test_kunden_aus_datei_laesst_sich_wiederholen(beispiel_csv: Path) -> None:
     """Beleg dafuer, dass die Datei sauber geschlossen wird."""
-    erster = Kunde.kunden_aus_datei(str(beispiel_csv))
-    zweiter = Kunde.kunden_aus_datei(str(beispiel_csv))
+    erster = KundenCsv.aus_datei(str(beispiel_csv))
+    zweiter = KundenCsv.aus_datei(str(beispiel_csv))
     assert len(erster) == len(zweiter) == 3
 
 
@@ -214,13 +215,13 @@ def test_muelleingaben_liefern_immer_einen_fachfehler(
     """Ein nackter KeyError oder IndexError waere ein Leck: dann schluege
     eine interne Mechanik nach aussen durch, statt uebersetzt zu werden."""
     with pytest.raises(KundenverwaltungError):
-        Kunde.aus_csv_zeile(zeile)
+        KundenCsv.aus_zeile(zeile)
 
 
 def test_gueltige_eingaben_gehen_weiterhin_durch() -> None:
     """Gegenprobe zur Haertung: ohne sie wuerde der Test oben auch bestehen,
     wenn die Klasse jede Eingabe ablehnte."""
-    assert Kunde.aus_csv_zeile("Gut;gut@example.de;1500").umsatz == 1500
+    assert KundenCsv.aus_zeile("Gut;gut@example.de;1500").umsatz == 1500
 
 
 # --- Zwischenspeicherung ---------------------------------------------------
@@ -246,3 +247,14 @@ def test_gecachter_score_altert(kunde: Kunde) -> None:
     erster = kunde.risiko_score
     kunde.umsatz = 500_000
     assert kunde.risiko_score == erster
+
+
+# --- CSV-Export ------------------------------------------------------------
+
+def test_als_zeile_schreibt_das_gelesene_format(kunde: Kunde) -> None:
+    """Lesen und Schreiben sind Umkehrungen voneinander — beide kennen
+    dasselbe Trennzeichen, weil beide in derselben Klasse stehen."""
+    kunde.umsatz = 1500
+    zeile = KundenCsv.als_zeile(kunde)
+    assert zeile == f"{kunde.name};{kunde.email};1500.0"
+    assert KundenCsv.aus_zeile(zeile).umsatz == 1500.0

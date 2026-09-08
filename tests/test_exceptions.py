@@ -7,6 +7,7 @@ from kundenverwaltung import (
     Fehlerprotokoll,
     InfoLieferant,
     Kunde,
+    KundenCsv,
     KundeNichtGefundenError,
     KundenverwaltungError,
     UnbekannteKomponenteError,
@@ -62,12 +63,12 @@ def test_unbekannter_registry_schluessel() -> None:
 
 def test_csv_zeile_mit_falscher_feldanzahl() -> None:
     with pytest.raises(CsvFormatError, match="3 Felder"):
-        Kunde.aus_csv_zeile("Anna;anna@example.de")
+        KundenCsv.aus_zeile("Anna;anna@example.de")
 
 
 def test_csv_zeile_mit_unlesbarem_umsatz() -> None:
     with pytest.raises(CsvFormatError, match="muss eine Zahl sein"):
-        Kunde.aus_csv_zeile("Anna;anna@example.de;keine-zahl")
+        KundenCsv.aus_zeile("Anna;anna@example.de;keine-zahl")
 
 
 def test_ungueltige_email_beim_anlegen() -> None:
@@ -119,7 +120,7 @@ def test_typfehler_nennt_den_erhaltenen_typ(kunde: Kunde) -> None:
 def test_from_e_legt_die_ursache_in_cause() -> None:
     """Der ValueError von float() sagt, WAS nicht lesbar war."""
     with pytest.raises(CsvFormatError) as info:
-        Kunde.aus_csv_zeile("Anna;anna@example.de;keine-zahl")
+        KundenCsv.aus_zeile("Anna;anna@example.de;keine-zahl")
     assert isinstance(info.value.__cause__, ValueError)
 
 
@@ -139,7 +140,7 @@ def test_fehlende_datei_reicht_den_oserror_weiter() -> None:
     """Hier ist die untere Exception wertvoll: fehlt die Datei, oder fehlen
     nur die Rechte? Das kann der eigene Fehler nicht wissen."""
     with pytest.raises(CsvFormatError) as info:
-        Kunde.kunden_aus_datei("gibt-es-nicht.csv")
+        KundenCsv.aus_datei("gibt-es-nicht.csv")
     assert isinstance(info.value.__cause__, FileNotFoundError)
 
 
