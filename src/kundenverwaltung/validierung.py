@@ -5,6 +5,10 @@ die `self` nie angefasst hat — ein ablesbares Zeichen dafuer, dass sie
 in der falschen Klasse stand."""
 
 
+# ============================================================================
+# Validierung (Woche 8, Kuer: SRP)
+# Aufgabe: Eingaben pruefen, ohne ein Objekt dafuer zu brauchen
+# ============================================================================
 def email_gueltig(email: str) -> bool:
     """Prueft, ob eine Adresse die noetigen Bestandteile hat.
 

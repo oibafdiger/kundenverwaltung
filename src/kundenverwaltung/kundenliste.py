@@ -1,12 +1,23 @@
-"""Kundenliste: ein Container, der sich wie ein eingebauter anfuehlt."""
+"""Kundenliste: ein Container, der sich wie ein eingebauter anfuehlt —
+und seit Woche 9 seinen Inhalt in eine JSON-Datei schreiben kann."""
 
+import json
 from collections.abc import Iterator
-from typing import overload
+from typing import Any, overload
 
-from .exceptions import KundeNichtGefundenError
+from .dateien import json_atomar_schreiben
+from .exceptions import (
+    DateiInhaltError,
+    DateiNichtGefundenError,
+    DateiNichtLesbarError,
+    KundeNichtGefundenError,
+)
 from .kunde import Kunde
 
 
+# ============================================================================
+# Container (Woche 6, Donnerstag)
+# ============================================================================
 class Kundenliste:
     """Eine Sammlung von Kunden, die sich wie ein eingebauter Container anfuehlt.
 
@@ -148,7 +159,151 @@ class Kundenliste:
     def __repr__(self) -> str:
         return f"Kundenliste({self._kunden!r})"
 
+    # ------------------------------------------------------------------
+    # Serialisierung (Woche 9, Montag)
+    # ------------------------------------------------------------------
+    # Entschieden am 11.09.2026: Variante B, ein dict mit Versionsfeld, statt
+    # einer nackten Liste. Die Begruendung steht im Docstring von als_dict().
+    #
+    # Version 2 (Woche 10, Freitag): Kunden speichern "zustand" statt "aktiv".
+    # Genau fuer so eine Aenderung war das Versionsfeld gedacht. Version 1 wird
+    # weiterhin gelesen, alte Dateien bleiben benutzbar und werden beim
+    # naechsten Speichern von selbst zu Version 2.
+    #
+    # Ein Tupel statt eines sets: `in` vergleicht dort mit ==. Bei einem set
+    # wuerde eine kaputte Datei mit "version": [1] einen nackten TypeError
+    # (unhashable) werfen statt einer verstaendlichen Meldung.
+    FORMAT_VERSION = 2
+    LESBARE_VERSIONEN = (1, 2)
 
+    def als_dict(self) -> dict[str, Any]:
+        """Die ganze Liste als dict — mit Versionsnummer davor.
+
+        Die naheliegende Alternative waere eine nackte Liste gewesen:
+
+            [ {...}, {...} ]          statt   {"version": 1, "kunden": [...]}
+
+        Die Zeile extra kauft zwei Dinge:
+
+        1. Das Format kann sich aendern. Benennst du in Woche 10 ein Feld um,
+           liegen alte Dateien noch auf der Platte. Mit Versionsfeld kann
+           aus_dict() das SEHEN und eine klare Meldung geben. Ohne bekommst du
+           irgendwo tief drin einen KeyError, der nicht verraet, dass die
+           Datei einfach alt ist.
+
+        2. Es ist Platz fuer das, was spaeter dazukommt — der Notizspeicher
+           vom Dienstag zum Beispiel. Eine nackte Liste hat keinen Platz fuer
+           ein zweites Feld; man muesste das Format dann brechen.
+
+        Der Preis ist eine Verschachtelungsebene beim Lesen der Datei. Das ist
+        bei etwas, das Jahre ueberdauern soll, ein guter Tausch.
+
+        Eingetreten in Woche 10: Aus "aktiv" wurde "zustand". Weil die Datei
+        ihre Version mitbringt, lassen sich alte Dateien (Version 1) weiter
+        lesen, statt an einem fehlenden Feld zu scheitern.
+        """
+        return {
+            "version": Kundenliste.FORMAT_VERSION,
+            "kunden": [kunde.als_dict() for kunde in self._kunden],
+        }
+
+    # ------------------------------------------------------------------
+    # Dateizugriff (Woche 9, Dienstag)
+    # ------------------------------------------------------------------
+    def speichern(self, pfad: str) -> None:
+        """Schreibt die Liste als JSON-Datei — atomar (Donnerstag).
+
+        Die Fassung von Dienstag oeffnete den Zielpfad direkt mit "w" und
+        machte ihn damit sofort leer. Ein Abbruch mitten im Schreiben — und
+        dafuer genuegt ein Serialisierungsfehler — kostete den alten Stand.
+        Die ganze Buchfuehrung dafuer steckt jetzt in
+        json_atomar_schreiben(); hier bleibt nur noch, WAS geschrieben wird.
+
+        Nebenbei entfaellt eine Verdopplung: NotizSpeicher.speichern() hatte
+        denselben Rumpf. Die Fehleruebersetzung liegt jetzt an einer Stelle
+        statt an zweien.
+        """
+        json_atomar_schreiben(pfad, self.als_dict())
+
+    @classmethod
+    def laden(cls, pfad: str) -> "Kundenliste":
+        """Liest eine JSON-Datei und baut die Liste daraus.
+
+        Die Reihenfolge der except-Zweige ist nicht beliebig:
+        FileNotFoundError ist eine UNTERKLASSE von OSError. Stuende OSError
+        zuerst, faenge es auch die fehlende Datei, und der eigene Zweig waere
+        toter Code — Python probiert die Zweige von oben nach unten und nimmt
+        den ersten, der passt. Spezielles vor Allgemeinem.
+
+        json.JSONDecodeError steht ausserhalb dieser Familie (es erbt von
+        ValueError), seine Position ist deshalb gleichgueltig.
+
+        aus_dict() steht mit Absicht NACH dem try-Block statt darin. Die
+        Fachfehler, die es wirft, sind bereits die richtigen; lieferen sie
+        durch den except-Filter, wuerde ein Strukturfehler als
+        "JSON kaputt" gemeldet. Dieselbe Ueberlegung wie beim else-Block in
+        KundenCsv.aus_datei().
+        """
+        try:
+            with open(pfad, encoding="utf-8") as datei:
+                rohdaten = json.load(datei)
+        except FileNotFoundError as e:
+            raise DateiNichtGefundenError(f"Datei existiert nicht: {pfad!r}") from e
+        except OSError as e:
+            raise DateiNichtLesbarError(f"Datei nicht lesbar: {pfad!r}") from e
+        except json.JSONDecodeError as e:
+            raise DateiInhaltError(
+                f"Datei {pfad!r} enthaelt kein gueltiges JSON "
+                f"(Zeile {e.lineno}, Spalte {e.colno}): {e.msg}"
+            ) from e
+
+        return cls.aus_dict(rohdaten)
+
+    @classmethod
+    def aus_dict(cls, daten: dict[str, Any]) -> "Kundenliste":
+        """Baut die Liste zurueck und prueft vorher die Formatversion.
+
+        Die Pruefung steht ganz vorn, vor jedem Zugriff auf "kunden": Eine
+        Datei aus der Zukunft (Version 2, von einer neueren Programmfassung
+        geschrieben) soll eine verstaendliche Meldung geben und nicht an
+        einem fehlenden Feld stolpern.
+
+        Die Typpruefung ganz oben faengt einen Fall ab, den json.load()
+        klaglos durchlaesst: eine Datei, die eine LISTE enthaelt statt eines
+        Objekts — etwa aus der Zeit, bevor das Versionsfeld eingefuehrt
+        wurde. `daten.get(...)` wuerde daran mit AttributeError scheitern,
+        und der ist kein Fachfehler.
+
+        Der Parametertyp sagt dict, der Code prueft trotzdem. Kein
+        Widerspruch: mypy prueft den Quelltext, eine JSON-Datei ist zur
+        Laufzeit da. An der Vertrauensgrenze zaehlt, was ankommt, nicht was
+        angekuendigt war.
+        """
+        if not isinstance(daten, dict):
+            raise DateiInhaltError(
+                f"Erwartet wird ein JSON-Objekt, gefunden wurde "
+                f"{type(daten).__name__}"
+            )
+
+        version = daten.get("version")
+        if version not in cls.LESBARE_VERSIONEN:
+            raise DateiInhaltError(
+                f"Unbekannte Formatversion {version!r}, lesbar sind "
+                f"{list(cls.LESBARE_VERSIONEN)}. Stammt die Datei aus einer "
+                f"anderen Programmfassung?"
+            )
+
+        try:
+            eintraege = daten["kunden"]
+        except KeyError as e:
+            raise DateiInhaltError("Feld 'kunden' fehlt in der Datei") from e
+
+        return cls([Kunde.aus_dict(eintrag) for eintrag in eintraege])
+
+
+# ============================================================================
+# Kuer Woche 6: der Iterator eine Ebene tiefer, von Hand gebaut
+# ============================================================================
 class KundenlisteIterator:
     """Haelt die Position beim Durchlaufen einer Kundenliste.
 

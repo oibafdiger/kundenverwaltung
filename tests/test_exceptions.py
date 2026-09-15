@@ -4,6 +4,9 @@ import pytest
 
 from kundenverwaltung import (
     CsvFormatError,
+    DateiInhaltError,
+    DateiNichtGefundenError,
+    DateiNichtLesbarError,
     Fehlerprotokoll,
     InfoLieferant,
     Kunde,
@@ -11,6 +14,7 @@ from kundenverwaltung import (
     KundeNichtGefundenError,
     KundenverwaltungError,
     UnbekannteKomponenteError,
+    UngueltigeAdresseError,
     UngueltigeEmailError,
     UngueltigerBetragError,
     UngueltigerNameError,
@@ -22,7 +26,11 @@ FACHKLASSEN = [
     UngueltigeEmailError,
     UngueltigerNameError,
     UngueltigerBetragError,
+    UngueltigeAdresseError,
     CsvFormatError,
+    DateiNichtGefundenError,
+    DateiNichtLesbarError,
+    DateiInhaltError,
 ]
 
 
@@ -87,16 +95,18 @@ def test_negativer_umsatz(kunde: Kunde) -> None:
         kunde.umsatz = -5
 
 
-@pytest.mark.parametrize("wert", ["ja", 1, None], ids=["str", "int", "None"])
-def test_aktiv_mit_falschem_typ_wirft_typeerror(kunde: Kunde, wert: object) -> None:
+@pytest.mark.parametrize("wert", ["gesperrt", True, None], ids=["str", "bool", "None"])
+def test_zustand_mit_falschem_typ_wirft_typeerror(kunde: Kunde, wert: object) -> None:
     """Ein falscher TYP ist ein Programmierfehler, kein Fachfehler.
 
     Python trennt das: falscher Typ -> TypeError, richtiger Typ mit
     unzulaessigem Wert -> ValueError-artig. Diese Stelle gehoert deshalb
-    bewusst NICHT in die eigene Hierarchie.
+    bewusst NICHT in die eigene Hierarchie. Und genau hier faengt die Enum den
+    Fall ab, den ein String durchgelassen haette: "gesperrt" ist ein Wort,
+    kein Zustand.
     """
     with pytest.raises(TypeError):
-        kunde.aktiv = wert  # type: ignore[assignment]
+        kunde.zustand = wert  # type: ignore[assignment]
 
 
 # --- Fehlermeldungen tragen Kontext ---------------------------------------
@@ -112,7 +122,7 @@ def test_meldung_nennt_den_verstoss_nicht_die_regel(kunde: Kunde) -> None:
 
 def test_typfehler_nennt_den_erhaltenen_typ(kunde: Kunde) -> None:
     with pytest.raises(TypeError, match="str"):
-        kunde.aktiv = "ja"  # type: ignore[assignment]
+        kunde.zustand = "gesperrt"  # type: ignore[assignment]
 
 
 # --- Exception-Chaining ----------------------------------------------------

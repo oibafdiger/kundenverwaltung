@@ -1,7 +1,23 @@
 """Fehlerhierarchie der Kundenverwaltung.
 
-Eine Basisklasse, sechs Unterklassen, keine Zwischenebene. Wer
-KundenverwaltungError faengt, faengt alles aus diesem Paket — und nur das."""
+Eine Basisklasse, zehn Unterklassen, keine Zwischenebene. Wer
+KundenverwaltungError faengt, faengt alles aus diesem Paket — und nur das.
+
+Die drei Datei-Fehler sind absichtlich getrennt: DateiNichtGefundenError
+ist der einzige, auf den ein Aufrufer sinnvoll REAGIEREN kann (beim ersten
+Programmstart gibt es noch nichts), die anderen beiden bedeuten abbrechen."""
+
+
+# ============================================================================
+# Exceptions (Woche 7, Montag)
+# ============================================================================
+# Flache Hierarchie: eine Basis, fuenf Unterklassen, keine Zwischenebene.
+# Eine Zwischenebene (etwa CsvError ueber CsvFormatError) lohnt erst, wenn es
+# einen Aufrufer gibt, der genau dort fangen will UND dort alles bekommt, was
+# er braucht. Bei "alles rund um CSV" waere das hier nicht der Fall:
+# aus_csv_zeile baut einen Kunden und loest dabei auch den email-Setter aus —
+# eine Zeile mit kaputter Email wirft UngueltigeEmailError, nicht CsvError.
+# Die Gruppierung nach Herkunft waere also undicht.
 
 
 class KundenverwaltungError(Exception):
@@ -64,6 +80,20 @@ class UngueltigerBetragError(KundenverwaltungError):
     """
 
 
+class UngueltigeAdresseError(KundenverwaltungError):
+    """Eine Adresse hat ein leeres oder fehlendes Feld.
+
+    Wurfstelle: Adresse.__post_init__ — also beim Bauen, bei replace() und
+    beim Laden aus einer Datei, weil alle drei ueber __init__ laufen.
+
+    Geprueft wird nur, ob jedes Feld ein nicht-leerer Text ist, keine
+    PLZ-Formate: Die Klasse soll kaputte Daten abweisen, nicht Postregeln
+    einzelner Laender kennen. Wer den Fehler faengt, kann die Adresse
+    korrigiert neu anlegen. Weil er zur Hierarchie gehoert, muss ihn das
+    Laden aus einer Datei nicht erst uebersetzen.
+    """
+
+
 class CsvFormatError(KundenverwaltungError):
     """Eine CSV-Zeile laesst sich nicht zu einem Kunden verarbeiten.
 
@@ -76,4 +106,99 @@ class CsvFormatError(KundenverwaltungError):
     mit ungueltiger Email wirft UngueltigeEmailError, weil der Fehler aus dem
     email-Setter kommt. Wer wirklich jede kaputte Zeile abfangen will, faengt
     KundenverwaltungError.
+    """
+
+
+# Zuordnung der bestehenden Wurfstellen — Umbau am Dienstag:
+#
+#   InfoLieferant.erzeugt   unbekannter Schluessel  ->  UnbekannteKomponenteError
+#   aus_csv_zeile           falsche Feldanzahl      ->  CsvFormatError
+#   aus_csv_zeile           Umsatz keine Zahl       ->  CsvFormatError
+#   email-Setter            ungueltige Email        ->  UngueltigeEmailError
+#   umsatz-Setter           negativer Betrag        ->  UngueltigerBetragError
+#   aktiv-Setter            kein bool               ->  TypeError  (siehe unten)
+#
+# Der aktiv-Setter prueft mit isinstance den TYP, nicht den Wert. Python
+# trennt das: falscher Typ -> TypeError, richtiger Typ mit unzulaessigem Wert
+# -> ValueError. `aktiv = "ja"` ist ein Programmierfehler am Aufrufort, kein
+# Fachfehler der Kundenverwaltung — die Stelle gehoert deshalb NICHT in diese
+# Hierarchie. Nicht jeder Fehler ist ein Fachfehler.
+#
+# Kein Miterben von ValueError: Die Unterklassen erben ausschliesslich von
+# KundenverwaltungError, damit die Hierarchie die einzige Wahrheit ist. Preis
+# dafuer sind die `except ValueError`-Stellen in test_kunde.py, die am
+# Dienstag mitgezogen werden muessen — was ohnehin gut ist, weil jeder Test
+# dann benennt, welchen Fehler er genau erwartet.
+
+
+# ============================================================================
+# Dateizugriff (Woche 9, Dienstag)
+# ============================================================================
+# Drei Klassen, nicht eine und nicht fuenf. Die Regel aus Woche 7: Eine
+# eigene Klasse lohnt, wenn ein Aufrufer genau dort fangen will UND dann
+# etwas anderes tut als bei den Nachbarn.
+#
+#   DateiNichtGefundenError  Klar begruendet: Beim ERSTEN Programmstart gibt
+#                            es die Datei noch nicht. Das ist kein Fehler,
+#                            sondern der Normalfall — der Aufrufer faengt
+#                            und startet mit einer leeren Liste. Der
+#                            Kontextmanager am Mittwoch braucht genau das.
+#
+#   DateiNichtLesbarError    Datei da, aber das Betriebssystem gibt sie nicht
+#                            her: Verzeichnis statt Datei, keine Rechte,
+#                            defekter Datentraeger. Nicht behebbar, abbrechen.
+#
+#   DateiInhaltError         Gelesen, aber unbrauchbar: kein gueltiges JSON,
+#                            falsche Formatversion, fehlendes Pflichtfeld.
+#                            Ebenfalls abbrechen — und zwar unbedingt, denn
+#                            Weitermachen hiesse hier Datenverlust.
+#
+# Ehrlich zur Grenze zwischen den letzten beiden: Ein Aufrufer reagiert auf
+# beide gleich (abbrechen), nach der strengen Lesart der Regel koennte man
+# sie also zusammenlegen. Getrennt geblieben sind sie, weil die DIAGNOSE
+# verschieden ist — "repariere dein Dateisystem" gegen "repariere deine
+# Daten" — und weil ein Reparaturwerkzeug bei kaputtem Inhalt noch etwas
+# retten koennte, bei einem unlesbaren Datentraeger nicht. Zusammenlegen
+# waere spaeter billig, Auseinanderziehen teurer.
+
+
+class DateiNichtGefundenError(KundenverwaltungError):
+    """Unter dem angegebenen Pfad liegt keine Datei.
+
+    Wurfstellen: Kundenliste.laden(), NotizSpeicher.laden().
+
+    Der einzige Dateifehler, der regulaer vorkommt statt etwas anzuzeigen,
+    was schiefging: Beim ersten Programmstart existiert noch nichts. Wer
+    diesen Fehler faengt, faengt typischerweise mit einer leeren Liste an —
+    siehe KundenDatei (Mittwoch). Deshalb steht er getrennt von
+    DateiNichtLesbarError, obwohl beide aus derselben OSError-Familie kommen.
+    """
+
+
+class DateiNichtLesbarError(KundenverwaltungError):
+    """Die Datei existiert, das Betriebssystem gibt sie aber nicht her.
+
+    Wurfstellen: Kundenliste.speichern()/laden(), NotizSpeicher entsprechend.
+
+    Faelle: ein Verzeichnis statt einer Datei, fehlende Rechte, ein
+    schreibgeschuetzter oder voller Datentraeger. Alle nicht aus dem Programm
+    heraus behebbar — hier hilft nur eine Meldung an den Benutzer.
+    """
+
+
+class DateiInhaltError(KundenverwaltungError):
+    """Die Datei war lesbar, ihr Inhalt ist aber nicht verwertbar.
+
+    Wurfstellen: Kundenliste.laden() und aus_dict(), Kunde.aus_dict().
+
+    Deckt drei Stufen des Scheiterns ab, die alle dieselbe Reaktion
+    verlangen — abbrechen, nichts ueberschreiben:
+
+        kein gueltiges JSON      die Datei ist abgeschnitten oder verfremdet
+        falsche Formatversion    von einer anderen Programmfassung geschrieben
+        fehlendes Pflichtfeld    JSON in Ordnung, Struktur nicht
+
+    Warum nicht CsvFormatError mitbenutzen? Der Name wuerde luegen — hier ist
+    kein CSV im Spiel. Ein Fehlername, der die Herkunft falsch angibt, kostet
+    beim naechsten Debuggen mehr als eine zusaetzliche Klasse.
     """

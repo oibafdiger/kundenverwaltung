@@ -8,6 +8,10 @@ from .exceptions import CsvFormatError, KundenverwaltungError
 from .kunde import Kunde
 
 
+# ============================================================================
+# CSV-Format (Woche 8, Kuer: SRP)
+# Aufgabe: Kunden aus CSV lesen und nach CSV schreiben
+# ============================================================================
 class KundenCsv:
     """Uebersetzt zwischen Kunde und CSV — in beide Richtungen.
 

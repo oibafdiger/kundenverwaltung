@@ -1,8 +1,13 @@
 """Contextmanager zum Protokollieren von Fehlern."""
 
+from dataclasses import dataclass, field
 from types import TracebackType
 
 
+# ============================================================================
+# Kuer Woche 7: eigener Contextmanager
+# ============================================================================
+@dataclass(eq=False)
 class Fehlerprotokoll:
     """Contextmanager: haelt fest, was im with-Block schiefging.
 
@@ -34,10 +39,26 @@ class Fehlerprotokoll:
     vergleichen lassen. Ein echter Contextmanager haette die Wahl selten.
     """
 
-    def __init__(self, beschreibung: str, schlucken: bool = False) -> None:
-        self.beschreibung = beschreibung
-        self.schlucken = schlucken
-        self.meldungen: list[str] = []
+    # Seit Woche 10 eine dataclass. Die drei Felder ersetzen das bisherige
+    # __init__.
+    #
+    # meldungen: field(default_factory=list) statt `= []`. Das ist die
+    # Mutable-Default-Falle aus Woche 1 (Notizen.md, ganz oben): Ein `= []`
+    # als Default entsteht EINMAL beim Definieren der Klasse und wird von
+    # allen Instanzen geteilt — die Meldungen von Import A stuenden auch in
+    # Import B. default_factory ruft list() fuer JEDE Instanz neu auf.
+    # @dataclass laesst `= []` gar nicht erst zu und wirft beim Bauen der
+    # Klasse einen ValueError.
+    #
+    # init=False: meldungen ist ein Ergebnis, kein Parameter. Niemand soll
+    # Fehlerprotokoll("x", False, ["erfunden"]) schreiben koennen.
+    #
+    # eq=False (am Dekorator): Zwei Protokolle mit gleicher Beschreibung sind
+    # nicht "gleich" — es sind zwei verschiedene Vorgaenge. Ohne eq=False
+    # wuerde @dataclass Wertgleichheit erzeugen und __hash__ auf None setzen.
+    beschreibung: str
+    schlucken: bool = False
+    meldungen: list[str] = field(default_factory=list, init=False)
 
     def __enter__(self) -> "Fehlerprotokoll":
         return self
