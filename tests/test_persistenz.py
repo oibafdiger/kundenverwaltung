@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -12,6 +13,7 @@ from kundenverwaltung import (
     DateiNichtGefundenError,
     DateiNichtLesbarError,
     GeschaeftsDaten,
+    InfoLieferant,
     Kunde,
     KundenDatei,
     Kundenliste,
@@ -294,3 +296,41 @@ def test_generator_variante_ist_ebenfalls_transaktional(tmp_path: Path) -> None:
             raise ValueError("Fehler im Block")
 
     assert [k.name for k in Kundenliste.laden(str(pfad))] == ["Bleibt"]
+
+
+# --- Open-Closed: eine neue Komponentenklasse ohne Aenderung an Kunde ------
+
+def test_neue_komponentenklasse_uebersteht_speichern_ohne_aenderung_an_kunde(
+    tmp_path: Path,
+) -> None:
+    """Komponenten stehen als getaggte Liste in der Datei. Diese Klasse entsteht
+    erst hier im Test — in Kunde, Kundenliste oder der Speicherschicht steht
+    keine Zeile fuer sie, und sie uebersteht Speichern und Laden trotzdem."""
+
+    class VertragsDaten(InfoLieferant, key="vertrag"):
+        def __init__(self, laufzeit_monate: int) -> None:
+            self.laufzeit_monate = laufzeit_monate
+
+        def info(self) -> str:
+            return f"Vertrag: {self.laufzeit_monate} Monate"
+
+        def label(self) -> str:
+            return "Typ: Vertragskunde"
+
+        def felder(self) -> dict[str, Any]:
+            return {"laufzeit_monate": self.laufzeit_monate}
+
+        @classmethod
+        def aus_felder(cls, daten: dict[str, Any]) -> "VertragsDaten":
+            return cls(daten["laufzeit_monate"])
+
+    try:
+        kunde = Kunde("Vertrag", "vertrag@example.de")
+        kunde.komponente_hinzufuegen(VertragsDaten(24))
+        pfad = tmp_path / "kunden.json"
+        Kundenliste([kunde]).speichern(str(pfad))
+        assert "Vertrag: 24 Monate" in Kundenliste.laden(str(pfad))[0].info()
+    finally:
+        # Die Registry ist global. Ohne Aufraeumen saehe ein spaeterer Test
+        # einen Schluessel, den es im Paket gar nicht gibt.
+        InfoLieferant.registry.pop("vertrag", None)
