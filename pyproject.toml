@@ -1,7 +1,7 @@
 [project]
 name = "kundenverwaltung"
-version = "0.1.0"
-description = "Objektorientierte Kundenverwaltung in Python — Komposition, Protokolle, eigene Fehlerhierarchie"
+version = "0.2.0"
+description = "Objektorientierte Kundenverwaltung in Python — Komposition, Protokolle, Fehlerhierarchie, transaktionale JSON-Persistenz"
 requires-python = ">=3.12"
 dependencies = []
 
