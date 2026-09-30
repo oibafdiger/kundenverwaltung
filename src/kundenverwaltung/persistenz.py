@@ -1,324 +1,24 @@
-"""Was ueber eine einzelne Kundenliste hinausgeht: Notizen und die
-Klammer um beides.
+"""Die Klammer um einen Arbeitsblock: laden beim Betreten, speichern beim
+Verlassen — transaktional.
 
-NotizSpeicher haelt die Notizen in einer EIGENEN Datei — eine Notiz
-sagt nichts darueber aus, wer ein Kunde ist, sie haengt an ihm. Das
-Kriterium dafuer ist die Registry aus komponenten: Was dort eingetragen
-ist, gehoert zum Kunden; was nicht (Notiz), ist ein Anhang.
+Seit Woche 12 weiss dieses Modul nicht mehr, WOHIN gespeichert wird. Es
+bekommt einen Speicher uebergeben und ruft dessen Vertrag auf. Wer JSON
+will, gibt einen DateiSpeicher mit; wer testet, einen InMemorySpeicher.
 
-KundenDatei klammert Laden und Speichern beider Dateien um einen
-Arbeitsblock — transaktional: Fliegt im Block eine Exception, wird
-nichts geschrieben.
+KundenDatei ist die Klasse, kunden_datei dieselbe Klammer als Generator mit
+@contextmanager. Beide benutzen denselben Speicher und unterscheiden sich
+nur in der Verpackung.
+"""
 
-kunden_datei ist dieselbe Klammer als Generator mit @contextmanager.
-Beide Varianten benutzen dieselben Hilfsfunktionen und unterscheiden
-sich nur in der Verpackung."""
-
-import json
 from collections.abc import Generator
 from contextlib import contextmanager
 from types import TracebackType
-from typing import Any, Literal, NamedTuple
+from typing import Literal
 
-from .dateien import json_atomar_schreiben
-from .exceptions import (
-    DateiInhaltError,
-    DateiNichtGefundenError,
-    DateiNichtLesbarError,
-    KundenverwaltungError,
-)
-from .komponenten import Notiz
-from .kunde import Kunde
+from .exceptions import KundenverwaltungError
 from .kundenliste import Kundenliste
-
-
-# ============================================================================
-# Notizspeicher (Woche 9, Dienstag)
-# Aufgabe: Notizen aufbewahren, getrennt von den Kunden
-# ============================================================================
-class NotizSpeicher:
-    """Notizen zu Kunden, in einer eigenen Datei.
-
-    WARUM GETRENNT
-        Eine Notiz sagt nichts darueber aus, WER ein Kunde ist — sie haengt
-        an ihm. Technisch sichtbar wird das an der Registry: Die drei
-        Fachkomponenten sind dort eingetragen, Notiz ist es bewusst nicht
-        (Duck Typing, Woche 5). Dieses Kriterium entscheidet seit Woche 9,
-        wo etwas gespeichert wird.
-
-        In der Datenbanksprache von Phase 2: eine 1:n-Beziehung, zweite
-        Tabelle, Fremdschluessel auf die Kundennummer.
-
-    DER FREMDSCHLUESSEL
-        Genau deshalb musste die Kundennummer den Round-Trip ueberleben
-        (Montag). Ohne stabile Nummer koennte nichts auf einen Kunden zeigen.
-
-    DIE FALLE MIT DEN SCHLUESSELN
-        JSON kennt nur Strings als Objektschluessel. Schreibt man
-        {1000: [...]} hinein, kommt {"1000": [...]} heraus — lautlos. Ein
-        Nachschlagen mit der int-Nummer ginge danach ins Leere. Deshalb
-        wandelt _laden() die Schluessel beim Lesen zurueck nach int, und
-        als_dict() macht die Umwandlung beim Schreiben ausdruecklich statt
-        sie json zu ueberlassen.
-
-    WAS NOCH OFFEN IST
-        Zwei Dateien koennen auseinanderlaufen. Wird ein Kunde geloescht,
-        bleiben seine Notizen als Waisen liegen; auf_kunden_verteilen()
-        meldet sie deshalb zurueck, statt sie stillschweigend zu schlucken.
-        Und zwei Dateien bedeuten zwei Schreibvorgaenge: Bricht das Programm
-        dazwischen ab, passen sie nicht mehr zusammen. Donnerstag macht EINE
-        Datei atomar — atomar ueber zwei hinweg ist eine andere Nummer und
-        bleibt hier bewusst ungeloest.
-    """
-
-    FORMAT_VERSION = 1
-
-    def __init__(self, notizen: dict[int, list[Notiz]] | None = None) -> None:
-        self._notizen: dict[int, list[Notiz]] = notizen if notizen is not None else {}
-
-    def __len__(self) -> int:
-        """Anzahl der Notizen insgesamt, nicht der Kunden mit Notizen."""
-        return sum(len(liste) for liste in self._notizen.values())
-
-    def __repr__(self) -> str:
-        return f"NotizSpeicher({len(self)} Notizen zu {len(self._notizen)} Kunden)"
-
-    def fuer(self, nummer: int) -> list[Notiz]:
-        """Die Notizen eines Kunden — leere Liste, wenn er keine hat."""
-        return list(self._notizen.get(nummer, []))
-
-    @classmethod
-    def von_kunden(cls, kunden: "Kundenliste") -> "NotizSpeicher":
-        """Sammelt die Notizen aus einer Kundenliste ein.
-
-        Erkennungsmerkmal ist isinstance(Notiz) und nicht "steht nicht in der
-        Registry": Ein Objekt, das weder registriert noch eine Notiz ist,
-        soll nicht stillschweigend in der Notizdatei landen. Es faellt
-        weiterhin heraus — das ist die bekannte Restluecke von
-        komponente_hinzufuegen(), und sie soll sichtbar bleiben statt hier
-        halb zugedeckt zu werden.
-        """
-        gesammelt: dict[int, list[Notiz]] = {}
-        for kunde in kunden:
-            eigene = [k for k in kunde._info_komponenten if isinstance(k, Notiz)]
-            if eigene:
-                gesammelt[kunde.nummer] = eigene
-        return cls(gesammelt)
-
-    def auf_kunden_verteilen(self, kunden: "Kundenliste") -> list[int]:
-        """Haengt die Notizen wieder an die passenden Kunden.
-
-        Liefert die Kundennummern zurueck, zu denen es keinen Kunden (mehr)
-        gibt — die Waisen aus dem Docstring der Klasse. Bewusst ein
-        Rueckgabewert und kein Fehler: Ob Waisen ein Problem sind, weiss nur
-        der Aufrufer. Ein Reparaturwerkzeug will sie sehen, ein normaler
-        Programmstart darf sie ignorieren. Was diese Klasse nicht tun darf,
-        ist so zu tun, als gaebe es sie nicht.
-        """
-        vorhanden = {kunde.nummer: kunde for kunde in kunden}
-        waisen = []
-        for nummer, notizen in self._notizen.items():
-            kunde = vorhanden.get(nummer)
-            if kunde is None:
-                waisen.append(nummer)
-                continue
-            for notiz in notizen:
-                kunde.komponente_hinzufuegen(notiz)
-        return sorted(waisen)
-
-    def waisen_uebernehmen(self, quelle: "NotizSpeicher", nummern: list[int]) -> None:
-        """Holt die Notizen der Waisen aus einem anderen Speicher herueber.
-
-        Review-Fix 15.09.2026: von_kunden() sammelt nur ein, was an Kunden
-        haengt. Waisen haengen an niemandem und waeren beim Speichern
-        verloren. Diese Methode gibt sie aus dem geladenen Speicher zurueck.
-
-        Hat inzwischen ein Kunde diese Nummer (nur ueber nummer= moeglich,
-        weil der Zaehler ueber Waisen-Nummern gezogen wird), werden die
-        Notizen zusammengelegt. Es geht in keinem Fall etwas verloren.
-        """
-        for nummer in nummern:
-            self._notizen[nummer] = self._notizen.get(nummer, []) + quelle.fuer(nummer)
-
-    def als_dict(self) -> dict[str, Any]:
-        """Wie bei Kundenliste: dict mit Versionsfeld, nicht nackte Daten.
-
-        str(nummer) ist ausdruecklich hingeschrieben, obwohl json dieselbe
-        Umwandlung von sich aus vornaehme. Der Grund ist Ehrlichkeit: Beim
-        Laden MUSS zurueckgewandelt werden, und das sieht nur, wer weiss,
-        dass die Umwandlung stattfindet. Eine lautlose Konvertierung, die man
-        beim Lesen von Hand rueckgaengig macht, ist eine Falle.
-        """
-        return {
-            "version": NotizSpeicher.FORMAT_VERSION,
-            "notizen": {
-                str(nummer): [notiz.als_dict() for notiz in notizen]
-                for nummer, notizen in self._notizen.items()
-            },
-        }
-
-    @classmethod
-    def aus_dict(cls, daten: dict[str, Any]) -> "NotizSpeicher":
-        if not isinstance(daten, dict):
-            raise DateiInhaltError(
-                f"Erwartet wird ein JSON-Objekt, gefunden wurde "
-                f"{type(daten).__name__}"
-            )
-
-        version = daten.get("version")
-        if version != cls.FORMAT_VERSION:
-            raise DateiInhaltError(
-                f"Unbekannte Formatversion {version!r} im Notizspeicher, "
-                f"erwartet wird {cls.FORMAT_VERSION}"
-            )
-
-        gelesen: dict[int, list[Notiz]] = {}
-        for schluessel, eintraege in daten.get("notizen", {}).items():
-            try:
-                nummer = int(schluessel)
-            except ValueError as e:
-                raise DateiInhaltError(
-                    f"Kundennummer im Notizspeicher ist keine Zahl: {schluessel!r}"
-                ) from e
-            gelesen[nummer] = [Notiz.aus_dict(eintrag) for eintrag in eintraege]
-        return cls(gelesen)
-
-    def speichern(self, pfad: str) -> None:
-        """Atomar wie Kundenliste.speichern() — dieselbe Hilfsfunktion.
-
-        Wichtig fuer KundenDatei: Beide Dateien werden JE FUER SICH
-        unteilbar ersetzt. Dass beide ZUSAMMEN passen, folgt daraus nicht —
-        zwischen den zwei os.replace() liegt ein Moment, in dem die
-        Notizdatei schon neu und die Kundendatei noch alt ist.
-        """
-        json_atomar_schreiben(pfad, self.als_dict())
-
-    @classmethod
-    def laden(cls, pfad: str) -> "NotizSpeicher":
-        try:
-            with open(pfad, encoding="utf-8") as datei:
-                rohdaten = json.load(datei)
-        except FileNotFoundError as e:
-            raise DateiNichtGefundenError(
-                f"Notizdatei existiert nicht: {pfad!r}"
-            ) from e
-        except OSError as e:
-            raise DateiNichtLesbarError(f"Notizdatei nicht lesbar: {pfad!r}") from e
-        except json.JSONDecodeError as e:
-            raise DateiInhaltError(
-                f"Notizdatei {pfad!r} enthaelt kein gueltiges JSON "
-                f"(Zeile {e.lineno}, Spalte {e.colno}): {e.msg}"
-            ) from e
-
-        return cls.aus_dict(rohdaten)
-
-
-# ============================================================================
-# Laden und Speichern beider Dateien (Woche 9, Kuer und Review-Fix)
-# Aufgabe: die eigentliche Arbeit fuer KundenDatei UND kunden_datei
-# ============================================================================
-class Geladen(NamedTuple):
-    """Was _beide_laden() zurueckgibt: drei Werte mit Namen (Woche 10).
-
-    Vorher ein nacktes Tupel, tuple[Kundenliste, NotizSpeicher, list[int]].
-    Wer das Ergebnis benutzte, musste sich die REIHENFOLGE merken. Jetzt
-    heissen die Teile kunden, speicher und waisen.
-
-    Warum NamedTuple und nicht dict oder dataclass?
-
-    - dict: Ein Tippfehler beim Setzen legt still einen neuen Schluessel an,
-      beim Lesen gibt es erst zur Laufzeit einen KeyError, und mypy sieht
-      beides nicht. Ein dict passt, wenn die Schluessel vorher nicht
-      feststehen — hier stehen sie fest.
-    - dataclass: ginge auch. NamedTuple bleibt aber ein Tupel: Der bestehende
-      Code `kunden, speicher, waisen = _beide_laden(...)` laeuft unveraendert
-      weiter. Und ein Ergebnis soll man nicht nachtraeglich aendern — ein
-      NamedTuple ist von Haus aus unveraenderlich.
-    """
-
-    kunden: "Kundenliste"
-    speicher: "NotizSpeicher"
-    waisen: list[int]
-
-
-def _notizpfad_ableiten(kunden_pfad: str, notiz_pfad: str | None) -> str:
-    """kunden.json -> kunden.notizen.json, falls kein eigener Pfad angegeben ist.
-
-    Die Notizdatei gehoert zur Kundendatei; sie getrennt angeben zu muessen
-    waere eine Fehlerquelle ohne Gegenwert.
-    """
-    if notiz_pfad is not None:
-        return notiz_pfad
-    stamm = kunden_pfad[:-5] if kunden_pfad.endswith(".json") else kunden_pfad
-    return f"{stamm}.notizen.json"
-
-
-def _beide_laden(kunden_pfad: str, notiz_pfad: str) -> Geladen:
-    """Laedt Kunden und Notizen, haengt die Notizen an und meldet Waisen.
-
-    Herausgezogen aus KundenDatei.__enter__, als die Generator-Variante
-    dazukam (Kuer Woche 9). Seitdem steht die Arbeit an EINER Stelle, und
-    Klasse und Generator sind nur noch zwei Verpackungen darum.
-
-    Fehlende Datei = erster Programmstart = leer anfangen. Alle anderen
-    Dateifehler fliegen weiter: Eine kaputte Datei darf nicht still durch
-    eine leere ersetzt werden, sonst ueberschreibt das naechste Speichern
-    echte Daten.
-
-    Eine Nummer, zu der noch Notizen existieren, ist nicht frei (Review-Fix
-    15.09.2026). Bekaeme ein neuer Kunde die Nummer einer Waise, haengten ihre
-    Notizen beim naechsten Laden an ihm — an der falschen Person. Deshalb wird
-    der Zaehler auch ueber die Waisen-Nummern gezogen, genau wie
-    Kunde.aus_dict() ihn ueber geladene Kundennummern zieht.
-    """
-    try:
-        kunden = Kundenliste.laden(kunden_pfad)
-    except DateiNichtGefundenError:
-        kunden = Kundenliste()
-
-    try:
-        speicher = NotizSpeicher.laden(notiz_pfad)
-    except DateiNichtGefundenError:
-        speicher = NotizSpeicher()
-
-    waisen = speicher.auf_kunden_verteilen(kunden)
-    if waisen:
-        Kunde.naechste_nummer = max(Kunde.naechste_nummer, max(waisen) + 1)
-    return Geladen(kunden, speicher, waisen)
-
-
-def _beide_speichern(
-    kunden: "Kundenliste",
-    geladen: "NotizSpeicher",
-    waisen: list[int],
-    kunden_pfad: str,
-    notiz_pfad: str,
-) -> None:
-    """Schreibt Notizen und Kunden — ohne Waisen zu verlieren.
-
-    REVIEW-FIX 15.09.2026
-        Vorher wurde der Notizspeicher nur aus den Kunden neu eingesammelt.
-        Waisen haengen an keinem Kunden, also fehlten sie in der neuen Datei:
-        Ein with-Block, der gar nichts tat, loeschte sie. Jetzt werden sie aus
-        dem geladenen Speicher wieder uebernommen. Gemeldet ist nicht
-        aufbewahrt — erst beides zusammen ist richtig.
-
-    REIHENFOLGE MIT ABSICHT: erst die Notizen, dann die Kunden
-        Scheitert das Schreiben der Notizen, ist noch gar nichts geschrieben —
-        beide Dateien stehen konsistent auf dem alten Stand. Scheitert es
-        danach bei den Kunden, verweisen neue Notizen auf Kunden, die in der
-        alten Kundendatei fehlen: Beim naechsten Laden tauchen sie als Waisen
-        auf und bleiben dank des Fixes erhalten. Umgekehrt (Kunden zuerst)
-        fehlten einfach Notizen, und das fiele niemandem auf.
-
-        Ueber zwei Dateien hinweg ist das trotzdem nicht atomar. Donnerstag
-        loest das fuer EINE Datei; fuer zwei braeuchte es ein Journal oder eine
-        einzige Datei. Bewusst offen.
-    """
-    neu = NotizSpeicher.von_kunden(kunden)
-    neu.waisen_uebernehmen(geladen, waisen)
-    neu.speichern(notiz_pfad)
-    kunden.speichern(kunden_pfad)
+from .notizen import NotizSpeicher
+from .speicher import Speicher
 
 
 # ============================================================================
@@ -328,9 +28,26 @@ def _beide_speichern(
 class KundenDatei:
     """Klammert Laden und Speichern um einen Arbeitsblock.
 
-        with KundenDatei("kunden.json") as kunden:
+        with KundenDatei(DateiSpeicher("kunden.json")) as kunden:
             kunden.hinzufuegen(Kunde("Neu", "neu@x.de"))
         # hier ist schon gespeichert
+
+    DER SPEICHER KOMMT VON AUSSEN (Woche 12, Mittwoch)
+        Vorher nahm diese Klasse einen Pfad entgegen und baute sich daraus
+        selbst zwei JSON-Dateien. Damit war sie an JSON gebunden, obwohl JSON
+        sie nichts angeht: Ihre Aufgabe ist die KLAMMER — laden, arbeiten
+        lassen, speichern oder eben nicht.
+
+        Jetzt bekommt sie ein fertiges Speicher-Objekt. Sie ruft nur noch
+        laden() und speichern() auf und weiss nicht, was dahinter steckt:
+
+            KundenDatei(DateiSpeicher("kunden.json"))   # zwei JSON-Dateien
+            KundenDatei(InMemorySpeicher())             # nichts auf der Platte
+
+        Was das bringt, sieht man am besten an dem, was NICHT mehr geht: Man
+        kann diese Klasse nicht mehr testen, ohne sich zu entscheiden, WO
+        gespeichert wird — und genau deshalb kann man sie ab jetzt testen,
+        ohne eine Datei anzulegen.
 
     DIE ENTSCHEIDUNG: TRANSAKTIONAL
         Fliegt im Block eine Exception, wird NICHT gespeichert. Die alte Datei
@@ -367,21 +84,25 @@ class KundenDatei:
         2. Zurueckgegeben wird die Kundenliste, nicht self. `as kunden` soll
            die Liste liefern, nicht den Verwalter drumherum.
 
-    DIE FEHLENDE DATEI IST KEIN FEHLER
-        Beim ersten Programmstart gibt es noch nichts. DateiNichtGefundenError
-        wird deshalb gefangen und mit einer leeren Liste beantwortet — genau
-        dafuer ist er am Dienstag eine eigene Klasse geworden. Alle anderen
-        Dateifehler fliegen weiter: Eine unlesbare oder kaputte Datei
-        stillschweigend durch eine leere zu ersetzen hiesse, vorhandene Daten
-        beim naechsten Speichern zu ueberschreiben.
+    DER LEERE SPEICHER IST KEIN FEHLER
+        Beim ersten Programmstart gibt es noch nichts. Dass daraus eine leere
+        Kundenliste wird statt eines Fehlers, entscheidet seit Woche 12 die
+        IMPLEMENTIERUNG, nicht mehr diese Klasse — DateiSpeicher faengt dafuer
+        seinen DateiNichtGefundenError selbst ab. Richtig so: Was "noch nichts
+        da" heisst, weiss nur, wer weiss, wo die Daten liegen. Bei einer
+        Datenbank waere es eine leere Tabelle und gar keine Exception.
+
+        Alle anderen Speicherfehler fliegen weiter bis hierher und aus dem
+        with-Block heraus. Eine kaputte Quelle stillschweigend durch eine
+        leere zu ersetzen hiesse, vorhandene Daten beim naechsten Speichern zu
+        ueberschreiben.
     """
 
-    def __init__(self, kunden_pfad: str, notiz_pfad: str | None = None) -> None:
-        self.kunden_pfad = kunden_pfad
-        self.notiz_pfad = _notizpfad_ableiten(kunden_pfad, notiz_pfad)
+    def __init__(self, speicher: Speicher) -> None:
+        self.speicher = speicher
 
         self._kunden: Kundenliste | None = None
-        self._speicher: NotizSpeicher | None = None
+        self._notizen: NotizSpeicher | None = None
         self.waisen: list[int] = []
 
     def __enter__(self) -> Kundenliste:
@@ -395,13 +116,10 @@ class KundenDatei:
                 "zweiten with-Block ein neues Objekt an."
             )
 
-        # Die eigentliche Arbeit steht seit der Kuer in _beide_laden(), damit
-        # die Generator-Variante dieselbe benutzt. Hier bleibt nur, was die
+        # Die eigentliche Arbeit macht der Speicher. Hier bleibt nur, was die
         # KLASSE ausmacht: Ergebnisse in self ablegen, damit __exit__ sie
         # findet und der Aufrufer ueber .waisen an die Waisen kommt.
-        kunden, self._speicher, self.waisen = _beide_laden(
-            self.kunden_pfad, self.notiz_pfad
-        )
+        kunden, self._notizen, self.waisen = self.speicher.laden()
         self._kunden = kunden
         return kunden
 
@@ -425,14 +143,12 @@ class KundenDatei:
         # wird — sonst bliebe das Objekt nach einem Fehler fuer immer
         # "geoeffnet" und die Pruefung in __enter__ wuerde zur Sackgasse.
         kunden, self._kunden = self._kunden, None
-        speicher, self._speicher = self._speicher, None
+        notizen, self._notizen = self._notizen, None
 
-        if exc_wert is not None or kunden is None or speicher is None:
+        if exc_wert is not None or kunden is None or notizen is None:
             return False
 
-        _beide_speichern(
-            kunden, speicher, self.waisen, self.kunden_pfad, self.notiz_pfad
-        )
+        self.speicher.speichern(kunden, notizen, self.waisen)
         return False
 
 
@@ -440,12 +156,10 @@ class KundenDatei:
 # Kuer Woche 9: dieselbe Klammer als Generator
 # ============================================================================
 @contextmanager
-def kunden_datei(
-    kunden_pfad: str, notiz_pfad: str | None = None
-) -> Generator[Kundenliste, None, None]:
+def kunden_datei(speicher: Speicher) -> Generator[Kundenliste, None, None]:
     """Dieselbe Klammer wie KundenDatei — als Funktion mit @contextmanager.
 
-        with kunden_datei("kunden.json") as kunden:
+        with kunden_datei(DateiSpeicher("kunden.json")) as kunden:
             kunden.hinzufuegen(Kunde("Neu", "neu@x.de"))
 
     Was vor dem yield steht, ist __enter__. Was danach steht, ist __exit__.
@@ -476,21 +190,18 @@ def kunden_datei(
 
     WAS DIE FUNKTION NICHT KANN
         Keine .waisen — eine Funktion hat keine Attribute. Die Waisen gehen
-        nicht verloren (siehe _beide_speichern), der Aufrufer erfaehrt nur
-        nichts davon. Wer sie sehen will, nimmt KundenDatei.
+        nicht verloren (Speicher.speichern bekommt sie), der Aufrufer erfaehrt
+        nur nichts davon. Wer sie sehen will, nimmt KundenDatei.
 
         Nicht wiederverwendbar — ein zweites `with` auf demselben Objekt
         scheitert mit einem AttributeError aus der Standardbibliothek. Im
         Ergebnis richtig, aber mit einer Meldung, die niemandem hilft.
         KundenDatei meldet denselben Fall verstaendlich.
 
-    Die Arbeit selbst steht in _beide_laden() und _beide_speichern(), die
-    auch KundenDatei benutzt. Die beiden Varianten unterscheiden sich damit
-    nur noch in der Verpackung.
+    Die Arbeit selbst macht der uebergebene Speicher — derselbe, den auch
+    KundenDatei bekaeme. Die beiden Varianten unterscheiden sich damit nur
+    noch in der Verpackung.
     """
-    notiz_datei = _notizpfad_ableiten(kunden_pfad, notiz_pfad)
-    geladen = _beide_laden(kunden_pfad, notiz_datei)
+    geladen = speicher.laden()
     yield geladen.kunden
-    _beide_speichern(
-        geladen.kunden, geladen.speicher, geladen.waisen, kunden_pfad, notiz_datei
-    )
+    speicher.speichern(geladen.kunden, geladen.speicher, geladen.waisen)

@@ -68,5 +68,9 @@ def kundenliste() -> Kundenliste:
 
 @pytest.fixture
 def beispiel_csv() -> Path:
-    """Die mitgelieferte Beispieldatei: drei gute und drei kaputte Zeilen."""
+    """Die mitgelieferte Beispieldatei: drei gute und drei kaputte Zeilen.
+
+    Im Vault liegt sie neben dem Paket, im Portfolio-Repo in beispieldaten/.
+    Der Rest der Suite ist in beiden identisch — diese eine Zeile nicht.
+    """
     return Path(__file__).parent.parent / "beispieldaten" / "kunden.csv"

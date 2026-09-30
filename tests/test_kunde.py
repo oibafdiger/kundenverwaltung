@@ -8,6 +8,7 @@ from kundenverwaltung import (
     CsvFormatError,
     GeschaeftsDaten,
     Kunde,
+    UngueltigerBetragError,
     KundenCsv,
     Kundenliste,
     KundenverwaltungError,
@@ -290,3 +291,35 @@ def test_pruefung_braucht_keinen_kunden() -> None:
     String, nicht auf einem Objekt. Man kann pruefen, BEVOR man baut."""
     if email_gueltig("neu@example.de"):
         Kunde("Neu", "neu@example.de")
+
+
+# --- Luecken aus dem Abgleich mit test_kunde.py (Woche 12) ------------------
+
+def test_status_meldet_den_grosskunden(geschaeftskunde: Kunde) -> None:
+    geschaeftskunde.umsatz = 200_000
+    assert geschaeftskunde.status() == "Kunde ist ein Grosskunde"
+
+
+def test_status_meldet_den_normalen_kunden(kunde: Kunde) -> None:
+    assert kunde.status() == "Kunde ist ein normaler Kunde"
+
+
+def test_status_meldet_den_zustand_wenn_nicht_aktiv(geschaeftskunde: Kunde) -> None:
+    """Nicht aktiv schlaegt Grosskunde: Der Wert der Enum IST die Anzeige."""
+    geschaeftskunde.umsatz = 200_000
+    geschaeftskunde.sperren()
+    assert geschaeftskunde.status() == "gesperrt"
+
+
+def test_umsatz_hinzufuegen_summiert_und_liefert_den_neuen_stand(kunde: Kunde) -> None:
+    assert kunde.umsatz_hinzufügen(100) == 100.0
+    assert kunde.umsatz_hinzufügen(50) == 150.0
+    assert kunde.umsatz == 150.0
+
+
+def test_umsatz_hinzufuegen_laeuft_durch_den_setter(kunde: Kunde) -> None:
+    """Ein Abzug unter null muss abgewiesen werden — die Pruefung sitzt im
+    Setter, und umsatz_hinzufügen() geht durch ihn hindurch."""
+    kunde.umsatz = 10
+    with pytest.raises(UngueltigerBetragError):
+        kunde.umsatz_hinzufügen(-20)

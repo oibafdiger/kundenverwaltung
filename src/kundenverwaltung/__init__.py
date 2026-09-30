@@ -36,21 +36,35 @@ from .komponenten import (
 )
 from .kunde import Kunde, KundenZustand
 from .kundenliste import Kundenliste, KundenlisteIterator
-from .persistenz import KundenDatei, NotizSpeicher, kunden_datei
+from .notizen import NotizSpeicher
+from .persistenz import KundenDatei, kunden_datei
 from .protokoll import Fehlerprotokoll
+from .speicher import (
+    DateiSpeicher,
+    Geladen,
+    InMemorySpeicher,
+    JSONNotizSpeicher,
+    JSONSpeicher,
+    Speicher,
+)
 from .validierung import email_gueltig
 
 __all__ = [
     "Adresse",
     "CsvFormatError",
+    "DateiSpeicher",
     "DateiInhaltError",
     "DateiNichtGefundenError",
     "DateiNichtLesbarError",
     "Fehlerprotokoll",
+    "Geladen",
     "GeschaeftsDaten",
     "GrosskundenDaten",
+    "InMemorySpeicher",
     "InfoFaehig",
     "InfoLieferant",
+    "JSONNotizSpeicher",
+    "JSONSpeicher",
     "Kunde",
     "KundenCsv",
     "KundenDatei",
@@ -61,6 +75,7 @@ __all__ = [
     "KundenZustand",
     "Notiz",
     "NotizSpeicher",
+    "Speicher",
     "PrivatDaten",
     "UnbekannteKomponenteError",
     "UngueltigeAdresseError",

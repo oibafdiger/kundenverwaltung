@@ -135,3 +135,42 @@ def test_kunde_repr_traegt_die_repr_seiner_komponenten(
     assert "object at 0x" not in darstellung
     for teil in ("VollCorp", "1975", "Frau Schmidt", "Ringstrasse"):
         assert teil in darstellung
+
+
+# --- Luecken aus dem Abgleich mit test_kunde.py (Woche 12) ------------------
+
+@pytest.mark.parametrize(
+    "komponente, erwartet",
+    [
+        (PrivatDaten(1980), "Typ: Privatkunde"),
+        (GeschaeftsDaten("Firma", "DE1"), "Typ: Geschäftskunde"),
+        (GrosskundenDaten("Frau Meier"), "Typ: Grosskunde"),
+    ],
+)
+def test_jede_komponente_nennt_ihren_typ(komponente: InfoLieferant, erwartet: str) -> None:
+    """label() gehoert zum ABC-Vertrag und wurde von keinem Test aufgerufen."""
+    assert komponente.label() == erwartet
+
+
+def test_grosskundendaten_ueberstehen_den_round_trip() -> None:
+    original = GrosskundenDaten("Frau Meier")
+    zurueck = InfoLieferant.aus_dict(original.als_dict())
+    assert zurueck == original
+    assert isinstance(zurueck, GrosskundenDaten) and zurueck.betreuer == "Frau Meier"
+
+
+def test_grosskundendaten_vergleichen_sich_ueber_den_betreuer() -> None:
+    assert GrosskundenDaten("A") == GrosskundenDaten("A")
+    assert GrosskundenDaten("A") != GrosskundenDaten("B")
+    assert GrosskundenDaten("A") != "kein GrosskundenDaten"
+
+
+def test_komponente_ohne_typmarker_wird_abgewiesen() -> None:
+    with pytest.raises(UnbekannteKomponenteError, match="ohne Typmarker"):
+        InfoLieferant.aus_dict({"geburtsjahr": 1980})
+
+
+def test_unbekannter_typmarker_nennt_die_bekannten() -> None:
+    with pytest.raises(UnbekannteKomponenteError) as fehler:
+        InfoLieferant.aus_dict({"typ": "gibtsnicht"})
+    assert "privat" in str(fehler.value) and "geschaeft" in str(fehler.value)

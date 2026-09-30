@@ -1,15 +1,17 @@
-"""Kundenliste: ein Container, der sich wie ein eingebauter anfuehlt —
-und seit Woche 9 seinen Inhalt in eine JSON-Datei schreiben kann."""
+"""Kundenliste: ein Container, der sich wie ein eingebauter anfuehlt.
 
-import json
+Seit Woche 12 nur noch das. Das Schreiben und Lesen der JSON-Datei ist nach
+speicher.py umgezogen — ein Wechsel des Speichers ist ein anderer
+Aenderungsgrund als eine neue Container-Methode. Geblieben ist die Umwandlung
+in ein dict und zurueck (als_dict/aus_dict). Dass die mit ihrem
+{"version": ...}-Umschlag streng genommen auch schon Wissen ueber die DATEI
+ist, steht als P2b in REFACTORING.md."""
+
 from collections.abc import Iterator
 from typing import Any, overload
 
-from .dateien import json_atomar_schreiben
 from .exceptions import (
     DateiInhaltError,
-    DateiNichtGefundenError,
-    DateiNichtLesbarError,
     KundeNichtGefundenError,
 )
 from .kunde import Kunde
@@ -206,58 +208,6 @@ class Kundenliste:
             "version": Kundenliste.FORMAT_VERSION,
             "kunden": [kunde.als_dict() for kunde in self._kunden],
         }
-
-    # ------------------------------------------------------------------
-    # Dateizugriff (Woche 9, Dienstag)
-    # ------------------------------------------------------------------
-    def speichern(self, pfad: str) -> None:
-        """Schreibt die Liste als JSON-Datei — atomar (Donnerstag).
-
-        Die Fassung von Dienstag oeffnete den Zielpfad direkt mit "w" und
-        machte ihn damit sofort leer. Ein Abbruch mitten im Schreiben — und
-        dafuer genuegt ein Serialisierungsfehler — kostete den alten Stand.
-        Die ganze Buchfuehrung dafuer steckt jetzt in
-        json_atomar_schreiben(); hier bleibt nur noch, WAS geschrieben wird.
-
-        Nebenbei entfaellt eine Verdopplung: NotizSpeicher.speichern() hatte
-        denselben Rumpf. Die Fehleruebersetzung liegt jetzt an einer Stelle
-        statt an zweien.
-        """
-        json_atomar_schreiben(pfad, self.als_dict())
-
-    @classmethod
-    def laden(cls, pfad: str) -> "Kundenliste":
-        """Liest eine JSON-Datei und baut die Liste daraus.
-
-        Die Reihenfolge der except-Zweige ist nicht beliebig:
-        FileNotFoundError ist eine UNTERKLASSE von OSError. Stuende OSError
-        zuerst, faenge es auch die fehlende Datei, und der eigene Zweig waere
-        toter Code — Python probiert die Zweige von oben nach unten und nimmt
-        den ersten, der passt. Spezielles vor Allgemeinem.
-
-        json.JSONDecodeError steht ausserhalb dieser Familie (es erbt von
-        ValueError), seine Position ist deshalb gleichgueltig.
-
-        aus_dict() steht mit Absicht NACH dem try-Block statt darin. Die
-        Fachfehler, die es wirft, sind bereits die richtigen; lieferen sie
-        durch den except-Filter, wuerde ein Strukturfehler als
-        "JSON kaputt" gemeldet. Dieselbe Ueberlegung wie beim else-Block in
-        KundenCsv.aus_datei().
-        """
-        try:
-            with open(pfad, encoding="utf-8") as datei:
-                rohdaten = json.load(datei)
-        except FileNotFoundError as e:
-            raise DateiNichtGefundenError(f"Datei existiert nicht: {pfad!r}") from e
-        except OSError as e:
-            raise DateiNichtLesbarError(f"Datei nicht lesbar: {pfad!r}") from e
-        except json.JSONDecodeError as e:
-            raise DateiInhaltError(
-                f"Datei {pfad!r} enthaelt kein gueltiges JSON "
-                f"(Zeile {e.lineno}, Spalte {e.colno}): {e.msg}"
-            ) from e
-
-        return cls.aus_dict(rohdaten)
 
     @classmethod
     def aus_dict(cls, daten: dict[str, Any]) -> "Kundenliste":

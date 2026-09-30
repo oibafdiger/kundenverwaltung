@@ -25,6 +25,7 @@ from pathlib import Path
 from .komponenten import Adresse, GeschaeftsDaten, Notiz
 from .kunde import Kunde
 from .persistenz import KundenDatei
+from .speicher import DateiSpeicher
 
 
 def main() -> None:
@@ -32,7 +33,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as ordner:
         pfad = str(Path(ordner) / "kunden.json")
 
-        with KundenDatei(pfad) as kunden:
+        with KundenDatei(DateiSpeicher(pfad)) as kunden:
             anna = Kunde(
                 "Anna Beispiel",
                 "anna@example.de",
@@ -50,7 +51,7 @@ def main() -> None:
 
         print(f"Gespeichert in {Path(pfad).name} (und {Path(pfad).stem}.notizen.json)\n")
 
-        with KundenDatei(pfad) as kunden:
+        with KundenDatei(DateiSpeicher(pfad)) as kunden:
             print("Neu geladen, nach Umsatz sortiert:")
             for kunde in sorted(kunden, reverse=True):
                 print(f"  {kunde}")

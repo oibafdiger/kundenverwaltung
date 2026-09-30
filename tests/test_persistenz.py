@@ -15,6 +15,9 @@ from kundenverwaltung import (
     GeschaeftsDaten,
     InfoLieferant,
     Kunde,
+    DateiSpeicher,
+    JSONNotizSpeicher,
+    JSONSpeicher,
     KundenDatei,
     Kundenliste,
     KundenverwaltungError,
@@ -51,8 +54,8 @@ def test_round_trip_haelt_alle_felder(tmp_path: Path) -> None:
     waere auch bei verlorenen Daten gruen (siehe naechster Test)."""
     original = _kunde_mit_allem()
     pfad = tmp_path / "kunden.json"
-    Kundenliste([original]).speichern(str(pfad))
-    geladen = Kundenliste.laden(str(pfad))[0]
+    JSONSpeicher(str(pfad)).speichern(Kundenliste([original]))
+    geladen = JSONSpeicher(str(pfad)).laden()[0]
 
     assert geladen.name == original.name
     assert geladen.email == original.email
@@ -76,7 +79,7 @@ def test_eq_allein_waere_als_round_trip_test_wertlos() -> None:
 
 def test_datei_steht_im_format_version_2(tmp_path: Path) -> None:
     pfad = tmp_path / "kunden.json"
-    Kundenliste([_kunde_mit_allem()]).speichern(str(pfad))
+    JSONSpeicher(str(pfad)).speichern(Kundenliste([_kunde_mit_allem()]))
     roh = json.loads(pfad.read_text(encoding="utf-8"))
 
     assert roh["version"] == 2
@@ -97,10 +100,10 @@ def test_version_1_bleibt_lesbar_und_wird_beim_speichern_zu_version_2(
         {"name": "B", "email": "b@example.de", "nummer": 8102, "aktiv": False},
     ]}), encoding="utf-8")
 
-    liste = Kundenliste.laden(str(pfad))
+    liste = JSONSpeicher(str(pfad)).laden()
     assert [k.zustand for k in liste] == [KundenZustand.AKTIV, KundenZustand.INAKTIV]
 
-    liste.speichern(str(pfad))
+    JSONSpeicher(str(pfad)).speichern(liste)
     assert json.loads(pfad.read_text(encoding="utf-8"))["version"] == 2
 
 
@@ -115,13 +118,13 @@ def test_nummer_ueberlebt_und_neue_nummern_kollidieren_nicht() -> None:
 
 def test_fehlende_datei(tmp_path: Path) -> None:
     with pytest.raises(DateiNichtGefundenError) as info:
-        Kundenliste.laden(str(tmp_path / "gibts-nicht.json"))
+        JSONSpeicher(str(tmp_path / "gibts-nicht.json")).laden()
     assert isinstance(info.value.__cause__, FileNotFoundError)
 
 
 def test_verzeichnis_statt_datei(tmp_path: Path) -> None:
     with pytest.raises(DateiNichtLesbarError):
-        Kundenliste.laden(str(tmp_path))
+        JSONSpeicher(str(tmp_path)).laden()
 
 
 @pytest.mark.parametrize(
@@ -148,17 +151,17 @@ def test_unbrauchbarer_inhalt_ist_ein_dateiinhaltfehler(
     pfad = tmp_path / "kaputt.json"
     pfad.write_text(inhalt, encoding="utf-8")
     with pytest.raises(DateiInhaltError):
-        Kundenliste.laden(str(pfad))
+        JSONSpeicher(str(pfad)).laden()
 
 
 @pytest.mark.skipif(OHNE_RECHTEPRUEFUNG, reason="braucht Unix-Rechte und kein root")
 def test_unlesbare_datei(tmp_path: Path) -> None:
     pfad = tmp_path / "gesperrt.json"
-    Kundenliste().speichern(str(pfad))
+    JSONSpeicher(str(pfad)).speichern(Kundenliste())
     pfad.chmod(0o000)
     try:
         with pytest.raises(DateiNichtLesbarError):
-            Kundenliste.laden(str(pfad))
+            JSONSpeicher(str(pfad)).laden()
     finally:
         pfad.chmod(0o644)
 
@@ -169,13 +172,13 @@ def test_gesperrtes_verzeichnis_laesst_nichts_zurueck(tmp_path: Path) -> None:
     ordner = tmp_path / "nur_lesen"
     ordner.mkdir()
     pfad = ordner / "kunden.json"
-    Kundenliste([Kunde("Vorher", "vorher@example.de")]).speichern(str(pfad))
+    JSONSpeicher(str(pfad)).speichern(Kundenliste([Kunde("Vorher", "vorher@example.de")]))
     ordner.chmod(0o555)
     try:
         with pytest.raises(DateiNichtLesbarError):
-            Kundenliste([Kunde("Nachher", "nachher@example.de")]).speichern(str(pfad))
+            JSONSpeicher(str(pfad)).speichern(Kundenliste([Kunde("Nachher", "nachher@example.de")]))
         assert [p.name for p in ordner.iterdir()] == ["kunden.json"], "keine temporaere Datei"
-        assert Kundenliste.laden(str(pfad))[0].name == "Vorher", "alter Stand unberuehrt"
+        assert JSONSpeicher(str(pfad)).laden()[0].name == "Vorher", "alter Stand unberuehrt"
     finally:
         ordner.chmod(0o755)
 
@@ -213,45 +216,45 @@ def test_zugriffsrechte_bleiben_erhalten(tmp_path: Path) -> None:
 
 def test_erster_start_ohne_datei_liefert_eine_leere_liste(tmp_path: Path) -> None:
     pfad = tmp_path / "kunden.json"
-    with KundenDatei(str(pfad)) as kunden:
+    with KundenDatei(DateiSpeicher(str(pfad))) as kunden:
         assert len(kunden) == 0
         kunden.hinzufuegen(Kunde("Erster", "erster@example.de"))
-    assert len(Kundenliste.laden(str(pfad))) == 1
+    assert len(JSONSpeicher(str(pfad)).laden()) == 1
 
 
 def test_fehler_im_block_speichert_nichts(tmp_path: Path) -> None:
     """Transaktional: Eine Datei enthaelt immer einen vollstaendig erreichten Zustand."""
     pfad = tmp_path / "kunden.json"
-    with KundenDatei(str(pfad)) as kunden:
+    with KundenDatei(DateiSpeicher(str(pfad))) as kunden:
         kunden.hinzufuegen(Kunde("Bleibt", "bleibt@example.de"))
 
     with pytest.raises(ValueError):
-        with KundenDatei(str(pfad)) as kunden:
+        with KundenDatei(DateiSpeicher(str(pfad))) as kunden:
             kunden.hinzufuegen(Kunde("Verworfen", "weg@example.de"))
             raise ValueError("Fehler im Block")
 
-    assert [k.name for k in Kundenliste.laden(str(pfad))] == ["Bleibt"]
+    assert [k.name for k in JSONSpeicher(str(pfad)).laden()] == ["Bleibt"]
 
 
 def test_kaputte_datei_wird_nicht_durch_eine_leere_ersetzt(tmp_path: Path) -> None:
     pfad = tmp_path / "kunden.json"
     pfad.write_text("{kaputt", encoding="utf-8")
     with pytest.raises(DateiInhaltError):
-        with KundenDatei(str(pfad)):
+        with KundenDatei(DateiSpeicher(str(pfad))):
             pass
     assert pfad.read_text(encoding="utf-8") == "{kaputt"
 
 
 def test_notizen_liegen_in_einer_eigenen_datei(tmp_path: Path) -> None:
     pfad = tmp_path / "kunden.json"
-    with KundenDatei(str(pfad)) as kunden:
+    with KundenDatei(DateiSpeicher(str(pfad))) as kunden:
         kunde = Kunde("Mit Notiz", "notiz@example.de")
         kunde.komponente_hinzufuegen(Notiz("Rueckruf nach 16 Uhr"))
         kunden.hinzufuegen(kunde)
 
     assert "Rueckruf" not in pfad.read_text(encoding="utf-8")
     assert "Rueckruf" in (tmp_path / "kunden.notizen.json").read_text(encoding="utf-8")
-    with KundenDatei(str(pfad)) as kunden:
+    with KundenDatei(DateiSpeicher(str(pfad))) as kunden:
         assert "Rueckruf nach 16 Uhr" in kunden[0].info()
 
 
@@ -261,20 +264,20 @@ def test_waisen_werden_gemeldet_und_aufbewahrt(tmp_path: Path) -> None:
     aufbewahrt."""
     pfad = tmp_path / "kunden.json"
     notizen = tmp_path / "kunden.notizen.json"
-    Kundenliste().speichern(str(pfad))
-    NotizSpeicher({987_654: [Notiz("Kunde ist weg")]}).speichern(str(notizen))
+    JSONSpeicher(str(pfad)).speichern(Kundenliste())
+    JSONNotizSpeicher(str(notizen)).speichern(NotizSpeicher({987_654: [Notiz("Kunde ist weg")]}))
 
-    datei = KundenDatei(str(pfad))
+    datei = KundenDatei(DateiSpeicher(str(pfad)))
     with datei:
         pass
 
     assert datei.waisen == [987_654]
-    assert NotizSpeicher.laden(str(notizen)).fuer(987_654) == [Notiz("Kunde ist weg")]
+    assert JSONNotizSpeicher(str(notizen)).laden().fuer(987_654) == [Notiz("Kunde ist weg")]
     assert Kunde("Neu", "neu@example.de").nummer > 987_654, "eine Nummer mit Notizen ist nicht frei"
 
 
 def test_zweites_betreten_desselben_objekts_wird_abgewiesen(tmp_path: Path) -> None:
-    datei = KundenDatei(str(tmp_path / "kunden.json"))
+    datei = KundenDatei(DateiSpeicher(str(tmp_path / "kunden.json")))
     with datei:
         with pytest.raises(KundenverwaltungError):
             with datei:
@@ -287,15 +290,15 @@ def test_generator_variante_ist_ebenfalls_transaktional(tmp_path: Path) -> None:
     """Ohne try um das yield wird die Zeile danach bei einem Fehler nie
     erreicht — transaktional ohne ein einziges if."""
     pfad = tmp_path / "kunden.json"
-    with kunden_datei(str(pfad)) as kunden:
+    with kunden_datei(DateiSpeicher(str(pfad))) as kunden:
         kunden.hinzufuegen(Kunde("Bleibt", "bleibt@example.de"))
 
     with pytest.raises(ValueError):
-        with kunden_datei(str(pfad)) as kunden:
+        with kunden_datei(DateiSpeicher(str(pfad))) as kunden:
             kunden.hinzufuegen(Kunde("Verworfen", "weg@example.de"))
             raise ValueError("Fehler im Block")
 
-    assert [k.name for k in Kundenliste.laden(str(pfad))] == ["Bleibt"]
+    assert [k.name for k in JSONSpeicher(str(pfad)).laden()] == ["Bleibt"]
 
 
 # --- Open-Closed: eine neue Komponentenklasse ohne Aenderung an Kunde ------
@@ -328,9 +331,23 @@ def test_neue_komponentenklasse_uebersteht_speichern_ohne_aenderung_an_kunde(
         kunde = Kunde("Vertrag", "vertrag@example.de")
         kunde.komponente_hinzufuegen(VertragsDaten(24))
         pfad = tmp_path / "kunden.json"
-        Kundenliste([kunde]).speichern(str(pfad))
-        assert "Vertrag: 24 Monate" in Kundenliste.laden(str(pfad))[0].info()
+        JSONSpeicher(str(pfad)).speichern(Kundenliste([kunde]))
+        assert "Vertrag: 24 Monate" in JSONSpeicher(str(pfad)).laden()[0].info()
     finally:
         # Die Registry ist global. Ohne Aufraeumen saehe ein spaeterer Test
         # einen Schluessel, den es im Paket gar nicht gibt.
         InfoLieferant.registry.pop("vertrag", None)
+
+
+# --- Luecken aus dem Abgleich mit test_kunde.py (Woche 12) ------------------
+
+def test_fehlendes_kundenfeld_ist_ein_fachfehler() -> None:
+    """Version stimmt, aber "kunden" fehlt — ein KeyError waere hier kein
+    Fachfehler, sondern ein durchgereichtes Implementierungsdetail."""
+    with pytest.raises(DateiInhaltError, match="kunden"):
+        Kundenliste.aus_dict({"version": 2})
+
+
+def test_notizspeicher_zaehlt_notizen_nicht_kunden() -> None:
+    speicher = NotizSpeicher({1: [Notiz("a"), Notiz("b")], 2: [Notiz("c")]})
+    assert len(speicher) == 3, "drei Notizen zu zwei Kunden"
