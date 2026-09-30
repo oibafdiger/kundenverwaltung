@@ -1,19 +1,23 @@
 # Kundenverwaltung
 
 Eine objektorientierte Kundenverwaltung in Python — entstanden als
-Lernprojekt, das über elf Wochen schrittweise gewachsen ist. Der Fokus liegt
+Lernprojekt, das über zwölf Wochen schrittweise gewachsen ist. Der Fokus liegt
 nicht auf dem Funktionsumfang, sondern auf den Designentscheidungen: warum
 Komposition statt Vererbung, wann ein ABC und wann ein Protocol, wie eine
-Fehlerhierarchie aussieht, die einem Aufrufer tatsächlich hilft — und wie man
+Fehlerhierarchie aussieht, die einem Aufrufer tatsächlich hilft, und wie man
 Daten speichert, ohne sie bei einem Abbruch zu verlieren.
 
 Keine externen Abhängigkeiten. `mypy --strict` läuft ohne ein einziges
-`type: ignore` durch, 178 Tests in unter einer Sekunde.
+`type: ignore` durch. 238 Tests, davon 236 in unter einer Sekunde.
 
 ```python
-from kundenverwaltung import Adresse, GeschaeftsDaten, Kunde, KundenDatei
+from kundenverwaltung import (
+    Adresse, DateiSpeicher, GeschaeftsDaten, Kunde, KundenDatei,
+)
 
-with KundenDatei("kunden.json") as kunden:       # lädt — oder beginnt leer
+speicher = DateiSpeicher("kunden.json")
+
+with KundenDatei(speicher) as kunden:            # lädt, oder beginnt leer
     anna = Kunde("Anna Beispiel", "anna@example.de",
                  geschaefts_daten=GeschaeftsDaten("Beispiel GmbH", "DE123456789"),
                  adresse=Adresse("Hauptstrasse", "1", "10115", "Berlin"))
@@ -21,7 +25,7 @@ with KundenDatei("kunden.json") as kunden:       # lädt — oder beginnt leer
     kunden.hinzufuegen(anna)
 # Hier ist gespeichert: atomar, und nur weil der Block fehlerfrei durchlief.
 
-with KundenDatei("kunden.json") as kunden:
+with KundenDatei(speicher) as kunden:
     for kunde in sorted(kunden, reverse=True):    # nach Umsatz, ohne key-Argument
         print(kunde)    # 1000 Anna Beispiel <anna@example.de> — Kunde ist ein Grosskunde
 ```
@@ -35,7 +39,8 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
 python -m kundenverwaltung   # kurzer Vorführdurchlauf
-pytest                       # 178 Tests
+pytest                       # 238 Tests
+pytest -m "not langsam"      # ohne die zwei Subprozess-Tests, ~0,7 s
 mypy                         # streng, Einstellungen in pyproject.toml
 ```
 
@@ -51,14 +56,16 @@ src/kundenverwaltung/
   dateien.py        json_atomar_schreiben
   komponenten.py    InfoLieferant (ABC), InfoFaehig (Protocol), Adresse, Notiz
   kunde.py          Kunde, KundenZustand
+  notizen.py        NotizSpeicher
   csv_format.py     KundenCsv
-  kundenliste.py    Container mit vollem Protokoll, JSON-Speichern und -Laden
-  persistenz.py     NotizSpeicher, KundenDatei, kunden_datei
+  kundenliste.py    Container mit vollem Protokoll
+  speicher.py       Speicher (ABC), DateiSpeicher, InMemorySpeicher
+  persistenz.py     KundenDatei, kunden_datei
   main.py           Vorführung
   __main__.py       Startpunkt für python -m kundenverwaltung
   __init__.py       öffentliche Schnittstelle (__all__)
 
-tests/              sieben Dateien, nach Thema getrennt
+tests/              neun Dateien, nach Thema getrennt
 beispieldaten/      CSV mit absichtlich kaputten Zeilen
 ```
 
@@ -67,9 +74,10 @@ Die Module sind in Ebenen geordnet, und jedes importiert nur aus tieferen:
 ```
 0  exceptions, protokoll, validierung
 1  dateien, komponenten
-2  kunde
+2  kunde, notizen
 3  csv_format, kundenliste
-4  persistenz
+4  speicher
+5  persistenz
 ```
 
 Ein Test baut diesen Graphen bei jedem Lauf aus den Importen neu auf und sucht
@@ -139,6 +147,20 @@ Großkundenlogik, E-Mail-Prüfung und CSV-Format.
   Klasse stand.
 - Die **Großkundenlogik** blieb bewusst. Was nach dem Herauslösen übrig ist,
   *ist* die Aufgabe der Klasse; ohne sie bliebe ein Datenhalter ohne Verhalten.
+
+Später traf dieselbe Frage die Container. `Kundenliste` und `NotizSpeicher`
+hielten ihre Daten und wussten zugleich, wie diese auf die Platte kommen. Der
+Test dafür war nicht die Länge der Klasse, sondern: wenn sich X ändert, welche
+Datei fasse ich an?
+
+```
+Kunde bekommt ein Feld    →  kunde.py                       in Ordnung
+JSON wird Datenbank       →  kundenliste.py + persistenz.py  Schaden
+```
+
+Die zweite Zeile war der Grund zu handeln. Ein Speicherwechsel hätte
+Container-Klassen angefasst, die mit Speichern nichts zu tun haben. Der
+Dateizugriff liegt seitdem in `speicher.py`; die Container halten nur noch.
 
 ### Eine flache Fehlerhierarchie
 
@@ -217,8 +239,42 @@ Weitere Entscheidungen in der Speicherschicht:
   Fassung hatte sie still gelöscht, ein Regressionstest hält das fest.
 
 Dieselbe Klammer gibt es als Generator mit `@contextmanager` (`kunden_datei`).
-Beide Varianten teilen dieselben Hilfsfunktionen und unterscheiden sich nur in
-der Verpackung.
+Beide Varianten benutzen denselben Speicher und unterscheiden sich nur in der
+Verpackung.
+
+### Der Speicher ist austauschbar
+
+`KundenDatei` bekommt den Speicher übergeben, statt ihn sich zu bauen:
+
+```python
+KundenDatei(DateiSpeicher("kunden.json"))   # zwei JSON-Dateien
+KundenDatei(InMemorySpeicher())             # nichts auf der Platte
+```
+
+Vorher nahm die Klasse einen Pfad entgegen und wusste damit, dass daraus JSON
+wird. Wer den Speicher tauschen wollte, musste sie anfassen. Jetzt hängen beide
+Seiten nur noch am `Speicher`-Vertrag. `persistenz.py` importiert keine einzige
+konkrete Implementierung, und ein Test prüft das über den AST statt über eine
+Textsuche — die Docstrings *zeigen* `DateiSpeicher` als Beispiel, benutzen ihn
+aber nicht.
+
+Der Vertrag umfasst Kunden und Notizen zusammen. Bei zwei getrennten Verträgen
+müsste jemand von außen ihre Reihenfolge koordinieren, und genau diese
+Koordination ist der heikle Teil. So gehört sie zu der Implementierung, die
+weiß, ob sie sie überhaupt einhalten kann: `DateiSpeicher` kann es nicht (zwei
+Dateien, zwei `os.replace()`), `InMemorySpeicher` braucht es nicht, eine
+Datenbank hätte an der Stelle eine Transaktion.
+
+`laden()` nimmt keinen Pfad entgegen. Er wäre ein Parameter, den
+`InMemorySpeicher` nur ignorieren könnte, also ein Vertrag, der für eine seiner
+Implementierungen nicht stimmt. Jede bringt im Konstruktor mit, was sie
+braucht.
+
+`InMemorySpeicher` legt die dicts ab, nicht die Objekte. Hielte er die Objekte,
+bekäme der Aufrufer dieselben zurück, die er hineingegeben hat, und Tests
+fänden Fehler nicht mehr, die eine Datei sehr wohl aufdeckt: ein Feld, das gar
+nicht serialisiert wird, oder ein Zustand, der den Round-Trip nicht überlebt.
+Ein Test-Double darf schneller sein als das Echte, aber nicht nachsichtiger.
 
 ### Das passende Werkzeug: dataclass, Enum — und eine normale Klasse
 
@@ -259,9 +315,20 @@ alle mit dabei. `hinzufuegen()` ist der einzige Schreibzugriff.
 
 ## Tests
 
-Sieben Dateien nach Thema getrennt, `pytest.mark.parametrize` für die
-Tabellenfälle, `tmp_path` für alles mit Dateien. Ein paar Beispiele für die Art
-von Test, die hier steht:
+Neun Dateien nach Thema getrennt, `pytest.mark.parametrize` für die
+Tabellenfälle, `tmp_path` für alles mit Dateien. Die Tests, die nur die Klammer
+prüfen, laufen über `InMemorySpeicher` und fassen keine Datei an; wo die Datei
+selbst das Thema ist (atomares Schreiben, Zugriffsrechte, kaputtes JSON),
+bleiben Dateien.
+
+`test_python.py` steht etwas abseits. Dort liegt, was Python prüft statt das
+Projekt: was `@dataclass` erzeugt, dass `object.__setattr__` an `frozen`
+vorbeikommt, wie Python auf einen Importzyklus reagiert, was mypy aus einem
+Generic ableitet. Diese Tests würden auch dann noch etwas belegen, wenn es die
+Kundenverwaltung nicht gäbe. Die zwei, die einen eigenen Python-Prozess
+starten, sind als `langsam` markiert.
+
+Ein paar Beispiele für die Art von Test, die hier steht:
 
 - **Regressionstests** halten Fehler fest, die es wirklich gab — den
   Fragile-Base-Class-Bug, die still gelöschten Notizen.
@@ -271,17 +338,23 @@ von Test, die hier steht:
   wertlos, weil `Kunde.__eq__` nur die Nummer vergleicht — ein eigener Test
   belegt das mit drei verfälschten Feldern.
 - **Ränder:** gültiges JSON mit unbrauchbarem Inhalt, eine Version als Liste,
-  ein gesperrtes Verzeichnis — und jeweils die Prüfung, dass nichts
+  ein gesperrtes Verzeichnis, und jeweils die Prüfung, dass nichts
   zurückbleibt.
+- **Struktur statt nur Verhalten:** Dass `Kundenliste` nicht mehr speichern
+  kann, prüft nicht bloß `hasattr`. Eine private `_speichern()`-Hilfsmethode
+  wäre so unsichtbar geblieben, also sucht der Test über den AST, ob im Modul
+  überhaupt noch `json` oder `open` vorkommt.
 
 ## Was dieses Projekt nicht ist
 
 Keine Nebenläufigkeit: Zwei Prozesse, die gleichzeitig speichern, überschreiben
 sich — ohne Datenverlust, aber der letzte gewinnt. Keine Benutzeroberfläche.
-Und zwei Dateien (Kunden und Notizen) sind je für sich atomar, aber nicht
-gemeinsam; die Reihenfolge beim Schreiben ist so gewählt, dass ein Abbruch
-dazwischen sichtbar statt still bleibt. Für mehr fehlt eine Datenbank — die
-kommt im nächsten Abschnitt des Lernwegs.
+Und `DateiSpeicher` schreibt zwei Dateien, die je für sich atomar sind, aber
+nicht gemeinsam; die Reihenfolge ist so gewählt, dass ein Abbruch dazwischen
+sichtbar statt still bleibt. Das ist eine Grenze dieser Implementierung, nicht
+des Vertrags: Ein Speicher auf einer Datenbank hätte an derselben Stelle eine
+Transaktion. Der Platz dafür ist vorbereitet, die Datenbank kommt im nächsten
+Abschnitt des Lernwegs.
 
 ## Lizenz
 
