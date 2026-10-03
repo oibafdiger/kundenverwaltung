@@ -230,33 +230,19 @@ class GrosskundenDaten(InfoLieferant, key="gross"):
 class Adresse:
     """Komposition: Kunde hat-eine Adresse.
 
-    Seit Woche 10 eine dataclass. Aus den vier Feldern unten erzeugt
-    @dataclass von selbst:
+    Seit Woche 10 eine dataclass. Vorher standen __init__, __repr__, __eq__
+    und __hash__ von Hand hier — die Klasse sagt jetzt nur noch, WAS eine
+    Adresse ist.
 
-        __init__   Adresse(strasse, hausnummer, plz, stadt), gleiche Reihenfolge
-        __repr__   Adresse(strasse='...', hausnummer='...', plz='...', stadt='...')
-        __eq__     vergleicht alle vier Felder, und nur mit einer Adresse
-        __hash__   ueber alle vier Felder — nur wegen frozen=True, siehe unten
+    WARUM frozen (Dienstag)
+        Eine Adresse ist ein Wert, kein Gegenstand mit Lebenslauf. Wer
+        umzieht, bekommt eine NEUE: dataclasses.replace(adresse, plz="10115").
+        Deshalb koennen sich zwei Kunden gefahrlos dieselbe Adresse teilen —
+        zieht einer um, bekommt nur er ein neues Objekt.
 
-    Vorher standen genau diese Methoden von Hand hier. Die Klasse sagt jetzt
-    nur noch, WAS eine Adresse ist; das WIE erledigt der Dekorator.
-
-    UNVERAENDERLICH (Dienstag): frozen=True verbietet jede Zuweisung an ein
-    Feld, nachdem die Adresse gebaut ist:
-
-        adresse.plz = "10115"   ->  FrozenInstanceError: cannot assign to field 'plz'
-
-    Wer umzieht, bekommt eine NEUE Adresse: dataclasses.replace(adresse,
-    plz="10115"). Die alte bleibt, wie sie war. Deshalb koennen sich zwei
-    Kunden gefahrlos dieselbe Adresse teilen — zieht einer um, bekommt nur er
-    ein neues Objekt.
-
-    WARUM frozen HASHBAR MACHT: Ein Hash darf sich nicht aendern, solange das
-    Objekt in einem set liegt (Woche 6, das Fach-Gleichnis). Bei einem
-    veraenderbaren Objekt kann das niemand zusagen — deshalb hatte Montag
-    __hash__ auf None gesetzt. Bei einem eingefrorenen Objekt koennen sich die
-    Felder nicht aendern, also auch der Hash nicht. @dataclass erzeugt
-    __hash__ darum genau dann, wenn eq=True UND frozen=True.
+        Nebenwirkung, die hier gebraucht wird: Erst frozen macht die Klasse
+        wieder hashbar, nachdem @dataclass mit eq=True __hash__ sonst auf
+        None setzt.
 
     Grenze: frozen ist eine Zusage, kein Tresor. object.__setattr__ kommt
     trotzdem durch. Es schuetzt vor Versehen, nicht vor Absicht.
@@ -270,19 +256,11 @@ class Adresse:
     def __post_init__(self) -> None:
         """Pruefung beim Bauen (Kuer Woche 10), direkt nach dem erzeugten __init__.
 
-        Vergleich mit der Property-Loesung aus Woche 2 (email-Setter in Kunde):
-
-            Property-Setter   prueft bei JEDER Zuweisung. Noetig, sobald sich
-                              ein Feld spaeter aendern darf (email, umsatz).
-            __post_init__     prueft EINMAL, beim Bauen. Reicht genau dann, wenn
-                              sich danach nichts mehr aendern kann.
-
-        Adresse ist frozen — deshalb reicht die Pruefung beim Bauen: Eine
-        einmal gueltige Adresse bleibt gueltig. Auch replace() baut ueber
-        __init__ neu und laeuft damit wieder hier durch.
-
-        Bei einer VERAENDERBAREN dataclass waere __post_init__ eine Luecke: Eine
-        spaetere Zuweisung ginge an der Pruefung vorbei (als Test festgehalten).
+        Warum hier und nicht in Settern wie bei Kunde.email: Adresse ist
+        frozen. Eine einmal gueltige Adresse bleibt gueltig, und auch
+        replace() laeuft ueber __init__ wieder hier durch. Bei einer
+        VERAENDERBAREN dataclass waere das eine Luecke — als Test
+        festgehalten.
 
         fields(self) statt einer festen Liste der vier Namen: Kommt ein Feld
         dazu, wird es automatisch mitgeprueft.

@@ -40,12 +40,10 @@ class NotizSpeicher:
         (Montag). Ohne stabile Nummer koennte nichts auf einen Kunden zeigen.
 
     DIE FALLE MIT DEN SCHLUESSELN
-        JSON kennt nur Strings als Objektschluessel. Schreibt man
-        {1000: [...]} hinein, kommt {"1000": [...]} heraus — lautlos. Ein
-        Nachschlagen mit der int-Nummer ginge danach ins Leere. Deshalb
-        wandelt _laden() die Schluessel beim Lesen zurueck nach int, und
-        als_dict() macht die Umwandlung beim Schreiben ausdruecklich statt
-        sie json zu ueberlassen.
+        JSON kennt nur Strings als Objektschluessel, und die Umwandlung
+        passiert lautlos. als_dict() schreibt str(nummer) deshalb
+        ausdruecklich hin, statt sie json zu ueberlassen — sonst sieht
+        niemand, dass beim Lesen zurueckgewandelt werden MUSS.
 
     WAS NOCH OFFEN IST
         Zwei Dateien koennen auseinanderlaufen. Wird ein Kunde geloescht,

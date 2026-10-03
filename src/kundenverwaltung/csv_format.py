@@ -77,25 +77,17 @@ class KundenCsv:
         """Liest eine CSV-Datei zeilenweise ein und ueberspringt kaputte Zeilen.
 
         Die einzige Stelle im Projekt, an der alle vier Bloecke einen echten
-        Job haben — weil hier zum ersten Mal eine Ressource im Spiel ist:
+        Job haben — bewusst so stehengelassen, weil `with` sie sonst alle
+        ersetzt und man nie sieht, was es einem abnimmt.
 
-            try     nur das Oeffnen. Was hier schiefgehen kann, ist genau
-                    das, was das except behandelt.
-            except  uebersetzt den OSError in einen Fachfehler. Ohne `from e`
-                    ginge die Ursache verloren (Donnerstag).
-            else    das Lesen. Gehoert NICHT in den try-Block: sonst wuerde
-                    das except auch Fehler aus der Schleife als "Datei nicht
-                    lesbar" melden. Dieselbe Ueberdehnung wie in info_eafp().
-            finally laeuft immer — auch bei return oder raise. Ohne ihn
-                    bliebe die Datei bei jedem Fehler offen.
+        Im try steht NUR das Oeffnen; das Lesen gehoert ins else, sonst
+        meldete das except auch Fehler aus der Schleife als "Datei nicht
+        lesbar". Dieselbe Ueberdehnung wie in info_eafp().
 
         Falle, die beim Bauen zugeschlagen hat: `datei = None` davor ist
-        noetig. finally laeuft IMMER — auch wenn open() fehlgeschlagen ist und
-        `datei` nie zugewiesen wurde. Ohne die Vorbelegung wirft `datei.close()`
-        dann einen UnboundLocalError, der den eigentlichen Fehler ueberdeckt.
-
-        Genau diese Buchfuehrung nimmt `with` einem ab — die Kuer ersetzt das
-        ganze try/finally durch eine Zeile.
+        noetig. finally laeuft auch, wenn open() fehlgeschlagen ist und
+        `datei` nie zugewiesen wurde — ohne die Vorbelegung ueberdeckt ein
+        UnboundLocalError den eigentlichen Fehler.
         """
         datei = None
         try:

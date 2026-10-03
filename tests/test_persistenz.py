@@ -2,6 +2,8 @@
 
 import json
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -299,6 +301,38 @@ def test_generator_variante_ist_ebenfalls_transaktional(tmp_path: Path) -> None:
             raise ValueError("Fehler im Block")
 
     assert [k.name for k in JSONSpeicher(str(pfad)).laden()] == ["Bleibt"]
+
+
+def test_try_finally_um_das_yield_bricht_die_zusage(tmp_path: Path) -> None:
+    """Die Gegenprobe zum Test darueber: Dieselbe Klammer mit try/finally
+    sieht ordentlicher aus und speichert auch nach einem Fehler.
+
+    Nachgebaut statt importiert — die Variante gibt es im Paket bewusst
+    nicht. Der Test haelt fest, WARUM nicht.
+    """
+    pfad = tmp_path / "kunden.json"
+
+    @contextmanager
+    def mit_finally(speicher: DateiSpeicher) -> Iterator[Kundenliste]:
+        geladen = speicher.laden()
+        try:
+            yield geladen.kunden
+        finally:
+            speicher.speichern(geladen.kunden, geladen.speicher, geladen.waisen)
+
+    with kunden_datei(DateiSpeicher(str(pfad))) as kunden:
+        kunden.hinzufuegen(Kunde("Bleibt", "bleibt@example.de"))
+
+    with pytest.raises(ValueError):
+        with mit_finally(DateiSpeicher(str(pfad))) as kunden:
+            kunden.hinzufuegen(Kunde("Halbe Arbeit", "halb@example.de"))
+            raise ValueError("Fehler im Block")
+
+    # Gespeichert, obwohl der Block gekracht ist — genau der Unterschied.
+    assert [k.name for k in JSONSpeicher(str(pfad)).laden()] == [
+        "Bleibt",
+        "Halbe Arbeit",
+    ]
 
 
 # --- Open-Closed: eine neue Komponentenklasse ohne Aenderung an Kunde ------

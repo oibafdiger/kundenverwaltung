@@ -20,52 +20,15 @@ from .exceptions import DateiNichtLesbarError
 def json_atomar_schreiben(pfad: str, daten: dict[str, Any]) -> None:
     """Schreibt JSON so, dass die Zieldatei nie halbfertig existiert.
 
-    DAS PROBLEM
-        `open(pfad, "w")` leert die Datei SOFORT — bevor auch nur ein Byte des
-        neuen Inhalts geschrieben ist. Bricht das Schreiben danach ab, ist der
-        alte Stand weg und der neue unvollstaendig:
+    Das Muster: temporaere Datei im SELBEN Verzeichnis, vollstaendig
+    schreiben, fsync, dann os.replace(). Umgehaengt wird der
+    Verzeichniseintrag, nicht der Inhalt geaendert — deshalb sieht ein Leser
+    nie einen Zwischenstand.
 
-            vorher : {"version": 1, "kunden": ["ALTER STAND, wertvoll"]}
-            Fehler : Object of type object is not JSON serializable
-            nachher: '{"version": 1, "kunden": [{"a": 1}, {"b": 2}, {"c": '
-
-        Es braucht dafuer keinen Stromausfall. Ein Serialisierungsfehler
-        mitten im Datenbestand genuegt, weil json.dump fortlaufend schreibt.
-
-    DIE LOESUNG
-        Nicht in die Zieldatei schreiben, sondern daneben — und erst wenn
-        alles vollstaendig auf der Platte steht, den Namen umhaengen:
-
-            1. temporaere Datei im SELBEN Verzeichnis anlegen
-            2. vollstaendig hineinschreiben
-            3. os.replace(temp, pfad)
-
-    WARUM DAS ATOMAR IST
-        os.replace() haengt einen VERZEICHNISEINTRAG um. Das Dateisystem
-        fuehrt diese Operation als Ganzes aus oder gar nicht — es gibt keinen
-        Zeitpunkt, zu dem ein Leser eine halbe Umbenennung saehe. Wer die
-        Datei oeffnet, bekommt entweder vollstaendig den alten oder
-        vollstaendig den neuen Inhalt.
-
-        Der Inhalt wird also nie geaendert. Geaendert wird, WELCHER Inhalt
-        unter diesem Namen zu finden ist. Das ist der ganze Trick.
-
-    DREI BEDINGUNGEN, DIE LEICHT UEBERSEHEN WERDEN
-        1. Dasselbe Dateisystem. Die Garantie gilt nur innerhalb eines
-           Dateisystems — daher `dir=ordner` und nicht /tmp. Ueber Grenzen
-           hinweg muesste kopiert werden, und Kopieren ist wieder ein
-           Vorgang mit Zwischenzustand.
-
-        2. os.replace(), nicht os.rename(). Unter Windows scheitert rename(),
-           wenn das Ziel existiert — und genau das ist hier der Normalfall.
-           os.replace() ueberschreibt auf allen Plattformen.
-
-        3. Atomar ist nicht dasselbe wie dauerhaft. Nach dem Schreiben liegen
-           die Daten womoeglich noch im Zwischenspeicher des Betriebssystems.
-           Ein Stromausfall koennte sie verlieren, obwohl das Programm
-           laengst weiter ist. os.fsync() erzwingt das Schreiben auf die
-           Platte, BEVOR umgehaengt wird. Ohne fsync waere die Umbenennung
-           zwar unteilbar, koennte aber auf einen leeren Inhalt zeigen.
+    Warum ueberhaupt: `open(pfad, "w")` leert die Datei sofort, bevor ein
+    Byte des neuen Inhalts geschrieben ist. Es braucht keinen Stromausfall,
+    damit das teuer wird — ein nicht serialisierbares Objekt mitten im
+    Bestand genuegt, weil json.dump fortlaufend schreibt.
 
     WAS DIESE FASSUNG NICHT LEISTET
         Streng genommen muesste auch das VERZEICHNIS gefsynct werden, damit
@@ -90,11 +53,10 @@ def json_atomar_schreiben(pfad: str, daten: dict[str, Any]) -> None:
             temp_datei.flush()      # Pythons Puffer ins Betriebssystem
             os.fsync(temp_datei.fileno())   # und von dort auf die Platte
 
-        # Zugriffsrechte der alten Datei uebernehmen. Ohne das behaelt die
-        # neue Datei die 0600 der temporaeren — sie waere nach dem ersten
-        # Speichern nur noch fuer den Eigentuemer lesbar. Eine Aenderung,
-        # die niemand angeordnet hat und die erst auffaellt, wenn jemand
-        # anderes die Datei braucht.
+        # Zugriffsrechte der alten Datei uebernehmen. Ohne das behielte die
+        # neue die 0600 der temporaeren — eine Rechteaenderung, die niemand
+        # angeordnet hat und die erst auffaellt, wenn ein anderer die Datei
+        # braucht.
         if os.path.exists(pfad):
             os.chmod(temp_pfad, os.stat(pfad).st_mode & 0o777)
 

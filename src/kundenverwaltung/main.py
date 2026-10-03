@@ -9,14 +9,9 @@ NICHT mit `python kundenverwaltung/main.py`: Dann ist die Datei ein loses
 Skript ohne Paket drumherum, und die relativen Importe unten (`from .kunde`)
 scheitern mit "attempted relative import with no known parent package".
 
-WAS `if __name__ == "__main__"` BEDEUTET
-    Jedes Modul hat eine Variable __name__. Wird es importiert, steht darin
-    sein Modulname ("kundenverwaltung.main"). Wird es als Programm gestartet,
-    setzt Python sie auf "__main__". Die Abfrage unten heisst also: "Nur wenn
-    diese Datei das Programm IST — nicht, wenn jemand sie importiert."
-
-    Ohne die Abfrage liefe die Vorfuehrung bei jedem `import` los, zum
-    Beispiel in einem Test, der nur main() pruefen will.
+Die `if __name__ == "__main__"`-Abfrage unten sorgt dafuer, dass die
+Vorfuehrung nicht bei jedem `import` loslaeuft — etwa in einem Test, der nur
+main() pruefen will.
 """
 
 import tempfile

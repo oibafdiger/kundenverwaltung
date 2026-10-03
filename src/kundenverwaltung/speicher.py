@@ -45,20 +45,15 @@ class JSONSpeicher:
 
     def laden(self) -> Kundenliste:
         """Liest eine JSON-Datei und baut die Liste daraus.
-        
-        Die Reihenfolge der except-Zweige ist nicht beliebig:
-        FileNotFoundError ist eine UNTERKLASSE von OSError. Stuende OSError
-        zuerst, faenge es auch die fehlende Datei, und der eigene Zweig waere
-        toter Code — Python probiert die Zweige von oben nach unten und nimmt
-        den ersten, der passt. Spezielles vor Allgemeinem.
-        
-        json.JSONDecodeError steht ausserhalb dieser Familie (es erbt von
-        ValueError), seine Position ist deshalb gleichgueltig.
-        
+
+        Die Reihenfolge der except-Zweige ist Absicht: FileNotFoundError ist
+        eine Unterklasse von OSError und muss deshalb zuerst stehen, sonst
+        ist der eigene Zweig toter Code.
+
         aus_dict() steht mit Absicht NACH dem try-Block statt darin. Die
-        Fachfehler, die es wirft, sind bereits die richtigen; lieferen sie
-        durch den except-Filter, wuerde ein Strukturfehler als
-        "JSON kaputt" gemeldet. Dieselbe Ueberlegung wie beim else-Block in
+        Fachfehler, die es wirft, sind bereits die richtigen; liefen sie
+        durch den except-Filter, wuerde ein Strukturfehler als "JSON kaputt"
+        gemeldet. Dieselbe Ueberlegung wie beim else-Block in
         KundenCsv.aus_datei().
         """
         try:

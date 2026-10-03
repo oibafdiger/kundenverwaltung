@@ -26,17 +26,13 @@ from .komponenten import (
 from .validierung import email_gueltig
 
 # TYPE_CHECKING (Woche 11, Donnerstag): InfoFaehig steht in diesem Modul nur in
-# Annotationen — als Parametertyp von komponente_hinzufuegen() und als Typ einer
-# lokalen Liste. Zur Laufzeit wird der Name nie gebraucht. TYPE_CHECKING ist
-# beim Programmlauf False und nur fuer mypy True; der Import passiert also nur
-# beim Pruefen. Damit das geht, macht `from __future__ import annotations` oben
-# alle Annotationen dieses Moduls zu Text, den Python nicht auswertet.
+# Annotationen, zur Laufzeit wird der Name nie gebraucht. Der Import passiert
+# deshalb nur beim Pruefen.
 #
-# Preis: typing.get_type_hints(Kunde.komponente_hinzufuegen) findet den Namen
-# zur Laufzeit nicht mehr und wirft NameError. Im Projekt liest niemand diese
-# Annotationen zur Laufzeit — anders als bei einer dataclass, die ihre Felder
-# daraus bestimmt. Deshalb nur an dieser einen Stelle, an der ein Name wirklich
-# ausschliesslich in Annotationen vorkommt.
+# Nur an dieser einen Stelle, und das ist die Begruendung: Der Preis ist, dass
+# typing.get_type_hints() den Namen zur Laufzeit nicht mehr findet. Hier liest
+# niemand diese Annotationen zur Laufzeit — bei einer dataclass, die ihre
+# Felder daraus bestimmt, waere derselbe Griff ein Fehler.
 if TYPE_CHECKING:
     from .komponenten import InfoFaehig
 
@@ -56,22 +52,14 @@ class KundenZustand(Enum):
         nicht geben darf.
 
     WARUM NICHT str
-        Ein String laesst jeden Tippfehler zu, ohne sich zu beschweren:
-
-            kunde.zustand == "gesprerrt"   # immer False, kein Fehler
-
-        Der Vergleich ist einfach falsch, und niemand merkt es. Bei einer Enum
-        fliegt derselbe Tippfehler sofort:
-
-            KundenZustand.GESPRERRT        # AttributeError, sofort sichtbar
-
-        und mypy meldet ihn schon, bevor das Programm laeuft.
+        `kunde.zustand == "gesprerrt"` ist immer False und kein Fehler — der
+        Vergleich ist falsch, und niemand merkt es. `KundenZustand.GESPRERRT`
+        fliegt sofort, und mypy meldet es schon vorher.
 
     DIE WERTE
-        Jedes Mitglied hat einen String als Wert ("aktiv", ...). Den braucht
-        man ueberall, wo der Zustand die Python-Welt verlaesst — zum Beispiel
-        in einer JSON-Datei. Innerhalb des Programms vergleicht man die
-        Mitglieder selbst, mit `is`.
+        Der String-Wert wird nur gebraucht, wo der Zustand die Python-Welt
+        verlaesst — in der JSON-Datei. Innerhalb des Programms vergleicht man
+        die Mitglieder selbst, mit `is`.
     """
 
     AKTIV = "aktiv"
@@ -81,25 +69,13 @@ class KundenZustand(Enum):
 
 # BEWUSST KEINE DATACLASS (Woche 10, Donnerstag)
 #
-# Kunde wurde probeweise als dataclass nachgebaut (test_kunde.py, Woche 10
-# Donnerstag). Sechs Stellen passen nicht, alle gemessen:
+# Kunde wurde probeweise als dataclass nachgebaut und bricht an sechs Stellen,
+# alle gemessen und als Test festgehalten: fehlende Validierung, email als Feld
+# UND Property, der Nummernzaehler als Klassenattribut, Gleichheit ueber alle
+# Felder statt ueber die Nummer, Sortierung nach Feldreihenfolge, und `name`
+# nur-lesbar geht allein mit frozen.
 #
-#   1. Das erzeugte __init__ prueft nichts. Leerer Name und kaputte Email
-#      gehen durch. Kunde validiert im Konstruktor und in den Settern.
-#   2. email ist Feld UND Property gleichen Namens. @dataclass macht dann das
-#      Property-Objekt zum Default des Feldes; ein Aufruf ohne email scheitert
-#      mit "argument of type 'property' is not iterable".
-#   3. Der Nummernzaehler ist ein Klassenattribut. Mit Annotation wird er zum
-#      Konstruktorparameter — ausser man schreibt ClassVar.
-#   4. Das erzeugte __eq__ vergleicht alle Felder. Woche 6 hat entschieden:
-#      gleiche Nummer heisst gleicher Kunde, auch bei anderem Umsatz.
-#   5. order=True sortiert nach der Reihenfolge der Felder, also nach name.
-#      Kunde sortiert nach Umsatz, dann Nummer.
-#   6. name soll nur lesbar sein. Das geht nur mit frozen — und das sperrt
-#      auch umsatz und zustand.
-#
-# Jede Stelle einzeln liesse sich reparieren (eq=False, ClassVar,
-# field(init=False), __post_init__ ...). Zusammen bliebe vom Gewinn nichts
+# Jede Stelle einzeln liesse sich reparieren. Zusammen bliebe vom Gewinn nichts
 # uebrig: Man schriebe mehr Schalter, als vorher Code dastand.
 #
 # Die Faustregel: Eine dataclass passt, wenn eine Klasse im Kern Daten TRAEGT
@@ -218,14 +194,10 @@ class Kunde:
     def risiko_score(self) -> float:
         """Wird beim ersten Zugriff berechnet und danach zwischengespeichert.
 
-        `cached_property` legt das Ergebnis in `self.__dict__` ab. Ab dem
-        zweiten Zugriff greift die normale Attributsuche und findet den Wert
-        dort, bevor sie ueberhaupt bei der Property landet — die Berechnung
-        laeuft also nur einmal.
-
-        Folge: Der Wert altert. Aendert sich der Umsatz nach dem ersten
-        Zugriff, bleibt der Score stehen. Belegen laesst sich das Caching
-        ueber __dict__ statt ueber eine Stoppuhr.
+        Der Preis, den man kennen muss: Der Wert altert. Aendert sich der
+        Umsatz nach dem ersten Zugriff, bleibt der Score stehen. Hier
+        vertretbar, weil der Score eine Momentaufnahme fuer die Anzeige ist
+        und keine Kennzahl, auf der etwas aufbaut.
         """
         score = 0.0
         if not self.aktiv:
@@ -283,7 +255,7 @@ class Kunde:
         nummer (automatisch vergeben) und umsatz (erst nachtraeglich
         gesetzt) — sie wuerden die eval-Faehigkeit brechen. Damit ist
         eval(repr(k)) rekonstruierbar, aber nicht identisch: neue
-        Kundennummer, Umsatz 0. Begruendung in notizen.md, Woche 6 Montag.
+        Kundennummer, Umsatz 0.
         """
         # Nur gesetzte Werte aufnehmen, damit die Zeile bei einfachen Kunden
         # kurz bleibt.
@@ -310,11 +282,8 @@ class Kunde:
         im Speicher getrennt liegen — wie Gleichheit ueber einen
         Primaerschluessel in einer Datenbank.
 
-        Der Parametertyp ist `object`, nicht `Kunde`, weil hier jeder Typ
-        ankommen darf. Bei einem Fremdtyp wird `NotImplemented`
-        zurueckgegeben (nicht: NotImplementedError geworfen). Python
-        versucht daraufhin die gespiegelte Operation und faellt schliesslich
-        auf den Identitaetsvergleich zurueck — Ergebnis False statt Absturz.
+        Bei einem Fremdtyp NotImplemented statt False: So bleibt der
+        Vergleich symmetrisch, weil Python erst noch die andere Seite fragt.
         """
         if not isinstance(other, Kunde):
             return NotImplemented
@@ -324,20 +293,13 @@ class Kunde:
     def __hash__(self) -> int:
         """Hash konsistent zu __eq__ — beide stuetzen sich auf nummer.
 
-        Regel: Was gleich ist, muss denselben Hash haben. Mengen und Dicts
-        ordnen einen Wert anhand seines Hashs einem Fach zu und vergleichen
-        per == nur innerhalb dieses Fachs. Bei abweichenden Hashes landen
-        zwei gleiche Objekte in verschiedenen Faechern und werden nie
-        miteinander verglichen — das Duplikat bliebe unbemerkt.
-
-        Diese Methode ist zwingend, weil Python __hash__ automatisch auf None
-        setzt, sobald eine Klasse __eq__ definiert. Ohne sie waere Kunde
-        unhashbar.
+        Beide auf dasselbe Feld zu stuetzen ist die bauliche Absicherung der
+        Regel "was gleich ist, hat denselben Hash". So kann sie gar nicht
+        verletzt werden, statt dass man sie einhalten muss.
 
         Gehasht wird ueber nummer, weil das read-only ist. Ueber umsatz zu
-        hashen waere fatal: Nach einer Aenderung gehoerte das Objekt in ein
-        anderes Fach, laege aber noch im alten — und waere in seiner eigenen
-        Menge nicht mehr auffindbar.
+        hashen waere fatal: Nach einer Aenderung waere das Objekt in seiner
+        eigenen Menge nicht mehr auffindbar.
         """
         return hash(self.nummer)
 
@@ -352,22 +314,18 @@ class Kunde:
 
         Die Kundennummer als zweites Kriterium ist kein Detail, sondern
         noetig, damit die Klasse widerspruchsfrei bleibt. @total_ordering
-        baut die uebrigen Operatoren aus __lt__ UND __eq__ zusammen:
+        baut die uebrigen Operatoren aus __lt__ UND __eq__ zusammen und
+        setzt deshalb voraus, dass beide dieselbe Ordnung beschreiben.
 
-            a <= b   ->   (a < b) or (a == b)
-            a >  b   ->   (not a < b) and (a != b)
-            a >= b   ->   (not a < b)
+        Mit "self.umsatz < other.umsatz" allein war das verletzt: Bei
+        gleichem Umsatz sagte < "nicht kleiner", waehrend == ueber die Nummer
+        "nicht gleich" sagte — und aus diesen zwei Neins folgte gleichzeitig
+        a > b UND b > a. Zwei Objekte, von denen jedes groesser war als das
+        andere.
 
-        Der Dekorator setzt damit voraus, dass beide Methoden dieselbe
-        Ordnung beschreiben. Mit "self.umsatz < other.umsatz" allein war das
-        verletzt: Bei gleichem Umsatz sagte < "nicht kleiner", waehrend ==
-        ueber die Nummer "nicht gleich" sagte — und aus diesen zwei Neins
-        folgte gleichzeitig a > b UND b > a. Zwei Objekte, von denen jedes
-        groesser als das andere war.
-
-        Mit dem Tupel entscheidet bei Umsatzgleichstand die Nummer. Da die
-        eindeutig ist, gilt zwischen zwei verschiedenen Kunden immer genau
-        eines von <, > oder ==.
+        Mit dem Tupel entscheidet bei Umsatzgleichstand die eindeutige
+        Nummer, und zwischen zwei verschiedenen Kunden gilt immer genau eines
+        von <, > oder ==.
 
         Rest-Einschraenkung: Zwei Objekte mit gleicher Nummer, aber
         unterschiedlichem Umsatz waeren weiterhin widerspruechlich. Dieser
@@ -460,12 +418,19 @@ class Kunde:
     #   Zukunft tragen. Berechenbares wird berechnet, nicht gespeichert.
     #
     #   Die drei EINZELNEN Komponentenattribute fehlen, weil sie doppelt
-    #   waeren: Sie stehen alle in _info_komponenten, und DIE wird gespeichert
-    #   — als getaggte Liste. Umgekehrt herum (drei feste Schluessel) waere es
-    #   auch gegangen und waere besser typisiert gewesen, haette aber
-    #   verlangt, dass Kunde.als_dict() bei jeder neuen Komponentenklasse
-    #   angefasst wird. Das ist die Open-Closed-Verletzung, die wir am
-    #   11.09. bewusst vermieden haben — siehe InfoLieferant.aus_dict().
+    #   waeren: Sie stehen alle in _info_komponenten, und DIE wird als
+    #   getaggte Liste gespeichert. Drei feste Schluessel waeren besser
+    #   typisiert gewesen, haetten aber verlangt, dass Kunde.als_dict() bei
+    #   jeder neuen Komponentenklasse angefasst wird — die
+    #   Open-Closed-Verletzung, die am 11.09. bewusst vermieden wurde.
+    #   Preis dafuer: InfoLieferant.aus_dict() verspricht nur InfoLieferant,
+    #   deshalb sucht aus_dict() die drei benannten Attribute per isinstance
+    #   wieder heraus.
+    #
+    #   Was damit NICHT erreicht ist: grosskunde_grenze() liest die drei
+    #   Attribute weiterhin namentlich. Das SPEICHERN ist offen fuer neue
+    #   Komponenten (Test in tests/test_persistenz.py), die KLASSE ist es
+    #   nicht. Steht als P6 in REFACTORING.md.
     #
     #   Notizen fehlen bewusst. Sie liegen zwar auch in _info_komponenten,
     #   stehen aber nicht in der Registry (Duck-Typing-Entscheidung aus
@@ -517,15 +482,13 @@ class Kunde:
     #
     #   Gewaehlt: ein keyword-only Parameter nummer: int | None in __init__.
     #   Verworfen: nach dem Konstruieren self._nummer ueberschreiben — das
-    #   greift an der read-only Property vorbei, dieselbe Gewalt, zu der die
-    #   Tests in Zeile 556 und 817 schon gezwungen sind.
+    #   griffe an der read-only Property vorbei.
     #
     #   Rest-Loch, bewusst offen gelassen: Wurde eine Nummer schon VOR dem
     #   Laden vergeben, ist die Kollision bereits passiert und nicht mehr
     #   heilbar. Schliessen liesse es sich nur mit einem set vergebener
     #   Nummern auf Klassenebene. Nicht gemacht, weil in diesem Projekt
-    #   nichts vor dem Laden erzeugt wird; test_kunde.py haelt das Verhalten
-    #   als Test fest, damit es nicht in Vergessenheit geraet.
+    #   nichts vor dem Laden erzeugt wird.
     #
     #   Die eigentliche Diagnose, fuer spaeter: naechste_nummer ist globaler
     #   veraenderlicher Zustand auf der Klasse. Er lebt im Prozess und merkt
@@ -597,12 +560,11 @@ class Kunde:
         def erste[T: InfoLieferant](typ: type[T]) -> T | None:
             """Die erste Komponente dieser Klasse aus der geladenen Liste.
 
-            Generisch (Kuer Woche 11): [T: InfoLieferant] heisst "T ist
-            irgendeine Unterklasse von InfoLieferant — welche, entscheidet der
-            Aufruf". erste(GeschaeftsDaten) liefert fuer mypy deshalb
-            GeschaeftsDaten | None, nicht bloss InfoLieferant | None. Nur so
-            passt das Ergebnis direkt in den Parameter geschaefts_daten des
-            Konstruktors. Ohne das Generic muesste man mit cast() nachhelfen.
+            Generisch (Kuer Woche 11), damit erste(GeschaeftsDaten) fuer mypy
+            GeschaeftsDaten | None liefert und nicht bloss
+            InfoLieferant | None. Nur so passt das Ergebnis direkt in den
+            Konstruktorparameter — sonst braeuchte es ein cast(), und das ist
+            eine Behauptung statt einer Pruefung.
             """
             return next((k for k in komponenten if isinstance(k, typ)), None)
 
@@ -670,31 +632,7 @@ class Kunde:
 
         return kunde
 
-    # Wie die Komponenten gespeichert werden — Entscheidungsweg vom 11.09.2026
-    #
-    #   Erst gebaut: Typmarker plus Dispatcher. Dann verworfen, weil als_dict()
-    #   die drei Komponenten unter ihren eigenen Schluesseln ablegte und der
-    #   Marker damit keinen Leser hatte. Dann WIEDER eingefuehrt, und zwar aus
-    #   einem anderen Grund als beim ersten Mal: nicht weil die Datenform ihn
-    #   erzwingt, sondern weil feste Schluessel das Open-Closed-Principle
-    #   verletzen. Bei jeder neuen Komponentenklasse haette Kunde.als_dict()
-    #   und Kunde.aus_dict() angefasst werden muessen — eine Klasse, die mit
-    #   der neuen Komponente nichts zu tun hat.
-    #
-    #   Preis, bewusst bezahlt: schwaechere Typisierung. InfoLieferant.aus_dict()
-    #   verspricht InfoLieferant, nicht GeschaeftsDaten; wer an `firma` will,
-    #   braucht isinstance. Die drei benannten Attribute werden deshalb in
-    #   aus_dict() per isinstance aus der Liste herausgesucht.
-    #
-    #   Was damit NICHT erreicht ist: grosskunde_grenze() liest die drei
-    #   Attribute weiterhin namentlich. Das Speichern ist offen, die Klasse
-    #   nicht. Diese Naht liegt in __init__, nicht in der Serialisierung —
-    #   und ist Thema von Woche 12. test_kunde.py haelt die Grenze als Test
-    #   fest, damit sie nicht in Vergessenheit geraet.
-    #
-    # Notizen liegen NICHT hier drin, sondern in NotizSpeicher (Dienstag).
-    # Kriterium: Was in der Registry steht, gehoert zum Kunden; was nicht
-    # drinsteht, ist ein Anhang. Die Restluecke davon: komponente_hinzufuegen()
-    # nimmt jedes Objekt mit info() an — weder registriert noch Notiz heisst
-    # weiterhin "wird nicht gespeichert". Bewusst so gelassen, damit die
-    # Luecke sichtbar bleibt statt halb zugedeckt zu werden.
+    # Restluecke der Registry-Regel, bewusst offen: komponente_hinzufuegen()
+    # nimmt jedes Objekt mit info() an. Weder registriert noch Notiz heisst
+    # weiterhin "wird nicht gespeichert" — so gelassen, damit die Luecke
+    # sichtbar bleibt statt halb zugedeckt zu werden.

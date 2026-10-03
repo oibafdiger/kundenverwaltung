@@ -72,17 +72,13 @@ class KundenDatei:
         noch als __context__ mitfuehrt, entsteht hier gar nicht erst.
 
     WAS __enter__ ANDERS MACHT ALS BEI Fehlerprotokoll (Woche 7)
-        Dort war __enter__ ein blosses `return self` und konnte nicht
-        scheitern. Hier laedt es — und Laden kann werfen. Zwei Folgen:
+        Dort konnte __enter__ nicht scheitern. Hier laedt es, und Laden kann
+        werfen — dann laeuft weder der Block noch __exit__. Diese Fassung
+        belegt deshalb bewusst nichts, was Aufraeumen braeuchte: laden()
+        oeffnet und schliesst die Dateien, bevor __enter__ zurueckkehrt.
 
-        1. Wirft __enter__, laeuft weder der Block noch __exit__. Was
-           __enter__ vorher belegt hat, raeumt niemand mehr auf. Diese
-           Fassung belegt bewusst nichts, was Aufraeumen braeuchte: Die
-           Dateien werden von laden() geoeffnet UND geschlossen, bevor
-           __enter__ zurueckkehrt. Es bleibt kein offenes Handle liegen.
-
-        2. Zurueckgegeben wird die Kundenliste, nicht self. `as kunden` soll
-           die Liste liefern, nicht den Verwalter drumherum.
+        Zurueckgegeben wird die Kundenliste, nicht self. `as kunden` soll
+        die Liste liefern, nicht den Verwalter drumherum.
 
     DER LEERE SPEICHER IST KEIN FEHLER
         Beim ersten Programmstart gibt es noch nichts. Dass daraus eine leere
@@ -163,8 +159,6 @@ def kunden_datei(speicher: Speicher) -> Generator[Kundenliste, None, None]:
             kunden.hinzufuegen(Kunde("Neu", "neu@x.de"))
 
     Was vor dem yield steht, ist __enter__. Was danach steht, ist __exit__.
-    Die Variablen ueberleben die Pause am yield von selbst — deshalb braucht
-    die Funktion kein self, in dem sie sich etwas merken muesste.
 
     TRANSAKTIONAL OHNE EIN EINZIGES if
         Fliegt im with-Block eine Exception, loest Python sie genau am yield
@@ -172,21 +166,10 @@ def kunden_datei(speicher: Speicher) -> Generator[Kundenliste, None, None]:
         gespeichert. KundenDatei braucht dafuer `if exc_wert is not None`;
         hier erledigt das der ganz normale Programmfluss.
 
-    DIE BEIDEN VORHERSAGEN AUS DER KUER (aufgeloest am 15.09.2026)
-        a) Ohne try — wird bei einem Fehler gespeichert?
-           Vermutung: "Es sollte kein Fehler geschmissen werden, da es vorher
-           kein enter ausgefuehrt worden ist."
-           Tatsaechlich: Der Teil vor dem yield IST das enter und lief schon.
-           Der Fehler fliegt am yield weiter zum Aufrufer, gespeichert wird
-           NICHT. Genau richtig fuer die Entscheidung vom Mittwoch.
-
-        b) Mit try/finally — wird gespeichert?
-           Vermutung: "speichert nicht".
-           Tatsaechlich: finally laeuft IMMER, also wird auch bei einem Fehler
-           gespeichert, und die halbe Arbeit landet in der Datei. Die Variante
-           sieht "sauberer" aus und bricht trotzdem die Entscheidung.
-
-        Beides steht als Test in test_kunde.py (Kuer, Teil 2 und 3).
+        Ein try/finally um das yield saehe ordentlicher aus und waere hier
+        falsch: finally laeuft immer, also wuerde auch nach einem Fehler
+        gespeichert und die halbe Arbeit landete in der Datei. Beide
+        Varianten stehen in tests/test_persistenz.py nebeneinander.
 
     WAS DIE FUNKTION NICHT KANN
         Keine .waisen — eine Funktion hat keine Attribute. Die Waisen gehen

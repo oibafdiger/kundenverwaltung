@@ -28,10 +28,8 @@ class KundenverwaltungError(Exception):
     bleiben absichtlich draussen und schlagen durch: Sie sind Bugs, keine
     Fachfehler, und sollen auffallen statt behandelt zu werden.
 
-    Geerbt wird von Exception, nicht von BaseException. BaseException umfasst
-    auch KeyboardInterrupt und SystemExit — "das Programm soll enden"-Signale,
-    die ein gewoehnliches `except Exception` absichtlich NICHT erwischt. Wer
-    von BaseException erbt, landet in derselben Kategorie und wird von
+    Geerbt wird von Exception, nicht von BaseException — sonst laege diese
+    Hierarchie in derselben Kategorie wie KeyboardInterrupt und wuerde von
     normalen Handlern nicht mehr gefangen.
     """
 
@@ -126,9 +124,8 @@ class CsvFormatError(KundenverwaltungError):
 #
 # Kein Miterben von ValueError: Die Unterklassen erben ausschliesslich von
 # KundenverwaltungError, damit die Hierarchie die einzige Wahrheit ist. Preis
-# dafuer sind die `except ValueError`-Stellen in test_kunde.py, die am
-# Dienstag mitgezogen werden muessen — was ohnehin gut ist, weil jeder Test
-# dann benennt, welchen Fehler er genau erwartet.
+# dafuer war, jede `except ValueError`-Stelle in den Tests mitzuziehen — was
+# ohnehin gut ist, weil jeder Test dann benennt, welchen Fehler er erwartet.
 
 
 # ============================================================================
