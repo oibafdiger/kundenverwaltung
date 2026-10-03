@@ -47,6 +47,13 @@ from .speicher import (
     JSONSpeicher,
     Speicher,
 )
+from .sql_speicher import (
+    KundeImOrt,
+    NotizAnzahl,
+    SQLiteSpeicher,
+    WaisenAnzahl,
+    ZustandUmsatz,
+)
 from .validierung import email_gueltig
 
 __all__ = [
@@ -68,20 +75,25 @@ __all__ = [
     "Kunde",
     "KundenCsv",
     "KundenDatei",
+    "KundeImOrt",
     "KundeNichtGefundenError",
     "Kundenliste",
     "KundenlisteIterator",
     "KundenverwaltungError",
     "KundenZustand",
     "Notiz",
+    "NotizAnzahl",
     "NotizSpeicher",
     "Speicher",
     "PrivatDaten",
+    "SQLiteSpeicher",
     "UnbekannteKomponenteError",
     "UngueltigeAdresseError",
     "UngueltigeEmailError",
     "UngueltigerBetragError",
     "UngueltigerNameError",
+    "WaisenAnzahl",
+    "ZustandUmsatz",
     "email_gueltig",
     "json_atomar_schreiben",
     "kunden_datei",

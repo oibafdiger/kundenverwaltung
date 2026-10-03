@@ -29,6 +29,7 @@ from kundenverwaltung import (
     Kundenliste,
     Notiz,
     NotizSpeicher,
+    SQLiteSpeicher,
     Speicher,
 )
 
@@ -40,10 +41,16 @@ PAKET = Path(kundenverwaltung.__file__).parent
 
 @pytest.fixture
 def speicher_varianten(tmp_path: Path) -> dict[str, Speicher]:
-    """Beide Implementierungen, damit derselbe Test ueber beide laufen kann."""
+    """Alle Implementierungen, damit derselbe Test ueber jede laufen kann.
+
+    Seit dem SQL-Sprint (03.10.2026) drei. Die Tests unten heissen noch
+    "beide_..." aus Woche 12; sie laufen unveraendert auch gegen
+    SQLiteSpeicher, und genau das ist der Beleg, dass der Vertrag traegt.
+    """
     return {
         "DateiSpeicher": DateiSpeicher(str(tmp_path / "kunden.json")),
         "InMemorySpeicher": InMemorySpeicher(),
+        "SQLiteSpeicher": SQLiteSpeicher(str(tmp_path / "kunden.db")),
     }
 
 

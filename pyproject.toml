@@ -1,7 +1,7 @@
 [project]
 name = "kundenverwaltung"
-version = "0.2.0"
-description = "Objektorientierte Kundenverwaltung in Python — Komposition, Protokolle, Fehlerhierarchie, transaktionale JSON-Persistenz"
+version = "0.3.0"
+description = "Objektorientierte Kundenverwaltung in Python — Komposition, Protokolle, Fehlerhierarchie, transaktionale Persistenz in JSON oder SQLite"
 requires-python = ">=3.12"
 dependencies = []
 
@@ -14,6 +14,11 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# schema.sql gehoert zum Paket: SQLiteSpeicher liest es zur Laufzeit neben
+# sich ein. Ohne diese Angabe nimmt setuptools nur .py-Dateien mit.
+[tool.setuptools.package-data]
+kundenverwaltung = ["*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
