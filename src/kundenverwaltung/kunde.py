@@ -22,6 +22,7 @@ from .komponenten import (
     GrosskundenDaten,
     InfoLieferant,
     PrivatDaten,
+    komponente_aus_dict,
 )
 from .validierung import email_gueltig
 
@@ -423,7 +424,7 @@ class Kunde:
     #   typisiert gewesen, haetten aber verlangt, dass Kunde.als_dict() bei
     #   jeder neuen Komponentenklasse angefasst wird — die
     #   Open-Closed-Verletzung, die am 11.09. bewusst vermieden wurde.
-    #   Preis dafuer: InfoLieferant.aus_dict() verspricht nur InfoLieferant,
+    #   Preis dafuer: komponente_aus_dict() verspricht nur InfoLieferant,
     #   deshalb sucht aus_dict() die drei benannten Attribute per isinstance
     #   wieder heraus.
     #
@@ -523,7 +524,7 @@ class Kunde:
            einhalten muss.
 
         3. Die Komponenten kommen als EINE getaggte Liste zurueck; welche
-           Klasse jeder Eintrag ist, entscheidet InfoLieferant.aus_dict()
+           Klasse jeder Eintrag ist, entscheidet komponente_aus_dict()
            anhand des Typmarkers. Kunde muss dafuer keine Komponentenklasse
            kennen.
 
@@ -553,7 +554,7 @@ class Kunde:
             ) from e
 
         komponenten = [
-            InfoLieferant.aus_dict(eintrag)
+            komponente_aus_dict(eintrag)
             for eintrag in daten.get("komponenten", [])
         ]
 

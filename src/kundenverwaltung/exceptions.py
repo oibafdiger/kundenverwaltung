@@ -42,6 +42,17 @@ class KundeNichtGefundenError(KundenverwaltungError):
     """
 
 
+class DoppeltKundennummerError(KundenverwaltungError):
+    """Eine Kundennummer kaeme in der Kundenliste mehr als einmal vor.
+
+    Wurfstelle: Kundenliste.hinzufuegen(). Ueber sie auch Kundenliste(...) und
+    Kundenliste.aus_dict(), also beim Laden einer Datei.
+
+    Eine eigene Klasse statt DateiInhaltError: Beim Hinzufuegen ist keine
+    Datei im Spiel, der Name wuerde dort luegen.
+    """
+
+
 class UnbekannteKomponenteError(KundenverwaltungError):
     """Zu einem Registry-Schluessel ist keine Komponentenklasse eingetragen.
 

@@ -24,6 +24,7 @@ from .exceptions import (
     UngueltigeEmailError,
     UngueltigerBetragError,
     UngueltigerNameError,
+    DoppeltKundennummerError,
 )
 from .komponenten import (
     Adresse,
@@ -33,6 +34,7 @@ from .komponenten import (
     InfoLieferant,
     Notiz,
     PrivatDaten,
+    komponente_aus_dict,
 )
 from .kunde import Kunde, KundenZustand
 from .kundenliste import Kundenliste, KundenlisteIterator
@@ -77,6 +79,7 @@ __all__ = [
     "KundenDatei",
     "KundeImOrt",
     "KundeNichtGefundenError",
+    "DoppeltKundennummerError",
     "Kundenliste",
     "KundenlisteIterator",
     "KundenverwaltungError",
@@ -96,5 +99,6 @@ __all__ = [
     "ZustandUmsatz",
     "email_gueltig",
     "json_atomar_schreiben",
+    "komponente_aus_dict",
     "kunden_datei",
 ]

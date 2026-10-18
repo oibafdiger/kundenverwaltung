@@ -36,6 +36,7 @@ from kundenverwaltung import (
     UnbekannteKomponenteError,
     UngueltigerBetragError,
 )
+from kundenverwaltung import sql_speicher
 
 
 @pytest.fixture
@@ -203,30 +204,48 @@ def test_name_mit_sql_zeichen_kommt_unveraendert_zurueck(
 
 # --- Die Transaktion --------------------------------------------------------
 
-def test_abbruch_mittendrin_laesst_alten_stand_stehen(speicher: SQLiteSpeicher) -> None:
-    """Der Kern von Block 2.
+def test_abbruch_mittendrin_laesst_alten_stand_stehen(
+    speicher: SQLiteSpeicher, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Der Kern von Block 2: Bricht speichern() MITTEN im Schreiben ab,
+    bleibt der alte Stand vollstaendig stehen.
 
-    Zwei Kunden mit derselben Nummer: Das erste INSERT gelingt, das zweite
-    verletzt den Primaerschluessel. Ohne Transaktion (jedes Statement sofort
-    gespeichert) waere die Tabelle jetzt halb neu: der alte Kunde geloescht,
-    ein neuer drin. Mit Transaktion wird ALLES zurueckgerollt, auch die
-    DELETEs davor.
+    Ablauf in speichern(): erst alles loeschen, dann die Kunden schreiben,
+    dann die Notizen. Der Test ersetzt das Schreiben der Notizen durch eine
+    Funktion, die wirft. In diesem Moment sind der alte Kunde schon geloescht
+    und der neue schon eingefuegt. Ohne Transaktion waere die Tabelle jetzt
+    halb neu. Mit Transaktion wird ALLES zurueckgerollt, auch die DELETEs.
 
-    Gegenprobe (03.10.2026): Mit isolation_level=None, also ohne
-    Transaktion, schlaegt dieser Test fehl. Ohne `with con:` bleibt er
-    dagegen gruen, weil close() die nie committete Transaktion verwirft
-    (T7 S3). `with con:` macht das ausdruecklich, statt es dem Zufall der
-    Aufraeumreihenfolge zu ueberlassen.
+    WARUM MONKEYPATCH (umgebaut in Block 1.1, Phase 2): Bis dahin erzwang
+    der Test den Abbruch mit zwei Kunden gleicher Nummer, das zweite INSERT
+    verletzte den Primaerschluessel. Seit Block 1.1 lehnt schon die
+    Kundenliste doppelte Nummern ab, die Liste liesse sich gar nicht mehr
+    bauen. monkeypatch ersetzt fuer die Dauer EINES Tests einen Namen und
+    stellt danach das Original wieder her.
+
+    - Ersetzt wird `sql_speicher._notizen_schreiben`, also der Name in dem
+      Modul, in dem speichern() ihn beim Aufruf nachschlaegt.
+    - Geworfen wird sqlite3.IntegrityError, derselbe Fehler, den vorher der
+      Primaerschluessel ausgeloest hat. So laeuft er durch dieselbe
+      Uebersetzung, und match="Regel des Schemas" bleibt gueltig.
+
+    Gegenprobe (03.10.2026, nach dem Umbau wiederholt): Mit
+    isolation_level=None, also ohne Transaktion, schlaegt dieser Test fehl.
+    Ohne `with con:` bleibt er dagegen gruen, weil close() die nie
+    committete Transaktion verwirft (T7 S3). `with con:` macht das
+    ausdruecklich, statt es dem Zufall der Aufraeumreihenfolge zu ueberlassen.
     """
     with KundenDatei(speicher) as kunden:
         kunden.hinzufuegen(Kunde("Alt", "alt@example.de", nummer=1))
 
-    doppelt = Kundenliste([
-        Kunde("Neu Eins", "eins@example.de", nummer=5),
-        Kunde("Neu Zwei", "zwei@example.de", nummer=5),
-    ])
+    def scheitert(*args: Any, **kwargs: Any) -> None:
+        raise sqlite3.IntegrityError("absichtlich, der Test erzwingt den Abbruch")
+
+    monkeypatch.setattr(sql_speicher, "_notizen_schreiben", scheitert)
+
+    neu = Kundenliste([Kunde("Neu", "neu@example.de", nummer=5)])
     with pytest.raises(DateiInhaltError, match="Regel des Schemas"):
-        speicher.speichern(doppelt, NotizSpeicher(), [])
+        speicher.speichern(neu, NotizSpeicher(), [])
 
     assert [k.name for k in _neu_laden(speicher)] == ["Alt"]
 

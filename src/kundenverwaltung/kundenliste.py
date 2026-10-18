@@ -12,6 +12,7 @@ from typing import Any, overload
 
 from .exceptions import (
     DateiInhaltError,
+    DoppeltKundennummerError,
     KundeNichtGefundenError,
 )
 from .kunde import Kunde
@@ -26,8 +27,8 @@ class Kundenliste:
     Komposition, nicht Vererbung: Die Kunden liegen in einem Feld, die Klasse
     erbt NICHT von list. Dieselbe Entscheidung wie in Woche 4 — beim Erben
     kaemen saemtliche list-Methoden mit, auch die, die hier nichts zu suchen
-    haben (sort, clear, insert, __iadd__ ...). So bleibt hinzufuegen() der
-    einzige Schreibzugriff.
+    haben (sort, clear, insert, __iadd__ ...). So bleiben hinzufuegen() und
+    entfernen() die einzigen Schreibzugriffe.
 
     Vier Dunder machen den Container aus: __len__, __getitem__, __contains__
     und __iter__. Die letzten beiden waeren nicht zwingend noetig — was sie
@@ -35,21 +36,47 @@ class Kundenliste:
     """
 
     def __init__(self, kunden: "list[Kunde] | None" = None) -> None:
-        # list(...) macht eine flache Kopie: die Liste ist neu, die Kunden
-        # darin sind dieselben Objekte. Ohne die Kopie zeigten Aufrufer und
-        # Kundenliste auf dasselbe Listenobjekt — wer die uebergebene Liste
-        # anfasst, veraenderte sonst die Kundenliste gleich mit.
-        self._kunden: list[Kunde] = list(kunden) if kunden is not None else []
+        # Eine EIGENE, neue Liste: die Kunden darin sind dieselben Objekte,
+        # die Liste aber nicht. Sonst zeigten Aufrufer und Kundenliste auf
+        # dasselbe Listenobjekt, und wer die uebergebene Liste anfasst,
+        # veraenderte die Kundenliste gleich mit.
+        #
+        # Jeder Kunde laeuft durch hinzufuegen() (Block 1.1): Die Pruefung auf
+        # doppelte Nummern steht nur dort, und auch aus_dict() kommt hier
+        # vorbei. Preis: jeder Kunde wird gegen alle vorherigen geprueft.
+        self._kunden: list[Kunde] = []
+        for kunde in kunden or []:
+            self.hinzufuegen(kunde)
 
 
     def hinzufuegen(self, kunde: Kunde) -> None:
-        """Haengt einen Kunden hinten an.
+        """Haengt einen Kunden hinten an, wenn seine Nummer noch frei ist.
 
-        Bewusst der einzige Schreibzugriff: Wer Kunden aufnehmen will, geht
-        hier durch. Beim Erben von list waeren daneben append, extend,
-        insert, __iadd__ und Konsorten offen — genau das sollte die
-        Komposition verhindern.
+        Bewusst einer von zwei Schreibzugriffen (der andere ist entfernen()):
+        Wer Kunden aufnehmen will, geht hier durch. Beim Erben von list
+        waeren daneben append, extend, insert, __iadd__ und Konsorten offen —
+        genau das sollte die Komposition verhindern.
+
+        DOPPELTE NUMMERN (Block 1.1, Phase 2): Die Nummer ist die Identitaet
+        eines Kunden (__eq__, __hash__) und der Bezug seiner Notizen. Zwei
+        Kunden mit derselben Nummer wuerden still einen verdecken: finde()
+        liefert nur den ersten, in einem set verschwindet einer. Deshalb wird
+        geworfen, nicht still uebergangen, und erst geprueft, dann angehaengt,
+        damit die Liste bei einem Fehler unveraendert bleibt.
+
+        `kunde in self` reicht als Pruefung, weil __contains__ ueber == und
+        damit ueber die Nummer vergleicht. Auch __init__ und damit aus_dict()
+        laufen hier durch, die Regel steht also nur an dieser Stelle.
+
+        GRENZE: `in` geht die Liste jedes Mal ganz durch. Beim Laden von n
+        Kunden sind das rund n²/2 Vergleiche. Fuer diesen Bestand egal, bei
+        sehr grossen Bestaenden waere ein set der Nummern schneller (siehe
+        __contains__).
         """
+        if kunde in self:
+            raise DoppeltKundennummerError(
+                f"Kundennummer {kunde.nummer!r} ist in dieser Liste schon vergeben"
+            )
         self._kunden.append(kunde)
 
     def finde(self, nummer: int) -> Kunde:
@@ -73,6 +100,20 @@ class Kundenliste:
             f"Keine Kundennummer {nummer!r} in dieser Liste "
             f"({len(self._kunden)} Eintraege)"
         )
+
+
+    def entfernen(self, nummer: int) -> None:
+        """Entfernt den Kunden mit der angegebenen Nummer.
+
+        Wirft KundeNichtGefundenError, wenn kein Kunde passt, damit
+        Tippfehler nicht unbemerkt bleiben, analog zu finde(). Die Methode
+        veraendert self._kunden direkt und gibt nichts zurueck, analog zu
+        hinzufuegen(). Wird der Kunde zusaetzlich benoetigt, kann er vorher
+        mit finde() abgefragt werden.
+        """
+        kunde = self.finde(nummer)
+        self._kunden.remove(kunde)
+
 
     def __len__(self) -> int:
         return len(self._kunden)

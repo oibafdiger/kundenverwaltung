@@ -298,11 +298,14 @@ def test_die_laufzeit_prueft_keine_typen() -> None:
     assert verdoppeln("ab") == "abab"  # type: ignore[arg-type, comparison-overlap]
 
 
-def test_annotationen_ohne_future_werden_ausgewertet() -> None:
-    """Ohne `from __future__ import annotations` wertet Python eine
-    Annotation beim Definieren aus — ein unbekannter Name wirft sofort."""
+def test_annotationen_werden_erst_beim_lesen_ausgewertet() -> None:
+    """Seit Python 3.14 (PEP 649) wertet Python eine Annotation erst aus,
+    wenn jemand `__annotations__` liest. Bis 3.13 warf schon `def` den
+    NameError, jetzt kommt er erst beim Zugriff."""
+    umgebung: dict[str, Any] = {}
+    exec("def f(x: GibtsNicht) -> None: ...", umgebung)
     with pytest.raises(NameError):
-        exec("def f(x: GibtsNicht) -> None: ...", {})
+        umgebung["f"].__annotations__
 
 
 def test_mit_future_bleibt_die_annotation_text() -> None:

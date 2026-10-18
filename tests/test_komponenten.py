@@ -12,6 +12,7 @@ from kundenverwaltung import (
     Notiz,
     PrivatDaten,
     UnbekannteKomponenteError,
+    komponente_aus_dict,
 )
 
 KOMPONENTEN = [
@@ -152,9 +153,21 @@ def test_jede_komponente_nennt_ihren_typ(komponente: InfoLieferant, erwartet: st
     assert komponente.label() == erwartet
 
 
+def test_dispatcher_haengt_nicht_mehr_an_der_klasse() -> None:
+    """aus_dict() heisst ueberall "baue genau DIESE Klasse".
+
+    Der Dispatcher entscheidet dagegen ueber den Typmarker und ist deshalb
+    seit Block 1.2 die Modulfunktion komponente_aus_dict(). Haengt er wieder
+    an InfoLieferant, erbt ihn jede Komponente, und PrivatDaten.aus_dict()
+    verspraeche wieder PrivatDaten, ohne sie zu liefern.
+    """
+    assert not hasattr(InfoLieferant, "aus_dict")
+    assert not hasattr(PrivatDaten, "aus_dict")
+
+
 def test_grosskundendaten_ueberstehen_den_round_trip() -> None:
     original = GrosskundenDaten("Frau Meier")
-    zurueck = InfoLieferant.aus_dict(original.als_dict())
+    zurueck = komponente_aus_dict(original.als_dict())
     assert zurueck == original
     assert isinstance(zurueck, GrosskundenDaten) and zurueck.betreuer == "Frau Meier"
 
@@ -167,10 +180,10 @@ def test_grosskundendaten_vergleichen_sich_ueber_den_betreuer() -> None:
 
 def test_komponente_ohne_typmarker_wird_abgewiesen() -> None:
     with pytest.raises(UnbekannteKomponenteError, match="ohne Typmarker"):
-        InfoLieferant.aus_dict({"geburtsjahr": 1980})
+        komponente_aus_dict({"geburtsjahr": 1980})
 
 
 def test_unbekannter_typmarker_nennt_die_bekannten() -> None:
     with pytest.raises(UnbekannteKomponenteError) as fehler:
-        InfoLieferant.aus_dict({"typ": "gibtsnicht"})
+        komponente_aus_dict({"typ": "gibtsnicht"})
     assert "privat" in str(fehler.value) and "geschaeft" in str(fehler.value)

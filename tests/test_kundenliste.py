@@ -7,6 +7,7 @@ from kundenverwaltung import (
     KundeNichtGefundenError,
     Kundenliste,
     KundenlisteIterator,
+    DoppeltKundennummerError,
 )
 
 
@@ -25,7 +26,7 @@ def test_konstruktor_kopiert_die_uebergebene_liste() -> None:
     assert len(liste) == 1
 
 
-def test_hinzufuegen_ist_der_einzige_schreibzugriff() -> None:
+def test_nur_vorgesehene_schreibzugriffe_sind_verfuegbar() -> None:
     """Komposition statt Vererbung: beim Erben von list waeren append,
     extend, insert, sort und clear alle mit dabei."""
     liste = Kundenliste()
@@ -33,6 +34,20 @@ def test_hinzufuegen_ist_der_einzige_schreibzugriff() -> None:
     assert len(liste) == 1
     assert not hasattr(liste, "append")
     assert not hasattr(liste, "sort")
+
+
+def test_konstruktor_lehnt_doppelte_nummer_ab() -> None:
+    with pytest.raises(DoppeltKundennummerError) as info:
+        Kundenliste([Kunde("A", "a@example.de", nummer=4711),
+                     Kunde("B", "b@example.de", nummer=4711)])
+    assert "4711" in str(info.value)
+
+
+def test_kunde_hinzufuegen_mit_vergebener_nummer_in_kundenliste(kundenliste: Kundenliste) -> None:
+    num = kundenliste[0].nummer
+    with pytest.raises(DoppeltKundennummerError):
+        kundenliste.hinzufuegen(Kunde("A", "a@example.de", nummer=num))
+    assert len(kundenliste) == 3
 
 
 # --- Container-Protokoll ---------------------------------------------------
@@ -117,6 +132,24 @@ def test_wer_nur_pruefen_will_nimmt_in(kundenliste: Kundenliste) -> None:
     """`in` ist die fehlerfreie Variante fuer die Frage OB, finde() fuer WELCHER."""
     assert (kundenliste[0] in kundenliste) is True
     assert (Kunde("Fremd", "fremd@example.de") in kundenliste) is False
+
+
+def test_entfernen_laesst_die_reihenfolge_der_uebrigen(kundenliste: Kundenliste) -> None:
+    """Bewusst der MITTLERE Kunde: Ein Fehler, der ueber die Position statt
+    ueber die Nummer entfernt (immer den ersten oder den letzten), faellt nur
+    so auf. Uebrig bleibt genau [Klein, Gross], in dieser Reihenfolge."""
+    kunden_nummer = kundenliste[1].nummer
+    kundenliste.entfernen(kunden_nummer)
+    assert [k.name for k in kundenliste] == ["Klein", "Gross"]
+
+
+def test_entfernen_wirft_wenn_die_nummer_fehlt(kundenliste: Kundenliste) -> None:
+    """Eine unbekannte Nummer wirft, damit Tippfehler nicht unbemerkt bleiben.
+    Und erst pruefen, dann aendern: Die Liste bleibt dabei unveraendert."""
+    with pytest.raises(KundeNichtGefundenError) as info:
+        kundenliste.entfernen(999_999)
+    assert "999999" in str(info.value), "die Meldung nennt die gesuchte Nummer"
+    assert len(kundenliste) == 3
 
 
 # --- Slicing ---------------------------------------------------------------

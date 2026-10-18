@@ -87,34 +87,66 @@ class InfoLieferant(ABC):
             ) from None
         return klasse(*args, **kwargs)
 
-    @staticmethod
-    def aus_dict(daten: dict[str, Any]) -> "InfoLieferant":
-        """Der Dispatcher: aus einem getaggten dict wird wieder ein Objekt.
 
-        Das Gegenstueck zu als_dict() und der Grund, warum die Menge der
-        Komponenten offen sein kann. Kunde muss keine einzige Komponentenklasse
-        kennen — er reicht jedes Listenelement hier durch.
+def komponente_aus_dict(daten: dict[str, Any]) -> InfoLieferant:
+    """Der Dispatcher: aus einem getaggten dict wird wieder ein Objekt.
 
-        Delegiert an aus_felder() der gefundenen Klasse, NICHT an erzeugt():
-        erzeugt() reicht die Werte an den Konstruktor durch und koppelt damit
-        die Schluessel in der Datei an die Parameternamen. Ein umbenannter
-        Konstruktorparameter wuerde das Laden alter Dateien lautlos brechen.
-        aus_felder() haelt diese Uebersetzung dort, wo die Felder zu Hause
-        sind.
-        """
-        typ = daten.get("typ")
-        if not isinstance(typ, str):
-            raise UnbekannteKomponenteError(
-                f"Komponente ohne Typmarker: {daten!r}"
-            )
-        try:
-            klasse = InfoLieferant.registry[typ]
-        except KeyError:
-            raise UnbekannteKomponenteError(
-                f"Unbekannte Komponente: {typ!r}. "
-                f"Bekannt: {sorted(InfoLieferant.registry)}"
-            ) from None
-        return klasse.aus_felder(daten)
+    Das Gegenstueck zu als_dict() und der Grund, warum die Menge der
+    Komponenten offen sein kann. Kunde muss keine einzige Komponentenklasse
+    kennen — er reicht jedes Listenelement hier durch.
+
+    Delegiert an aus_felder() der gefundenen Klasse, NICHT an erzeugt():
+    erzeugt() reicht die Werte an den Konstruktor durch und koppelt damit
+    die Schluessel in der Datei an die Parameternamen. Ein umbenannter
+    Konstruktorparameter wuerde das Laden alter Dateien lautlos brechen.
+    aus_felder() haelt diese Uebersetzung dort, wo die Felder zu Hause
+    sind.
+
+    Entscheidung (Block 1.2): Modulfunktion statt Methode.
+
+    (a) InfoLieferant.komponente_aus_dict(): bleibt an der Klasse,
+        wird weiter vererbt, aber der Name sagt, was passiert.
+        Vorteile:
+        - Die Funktion bleibt bei der Klasse, die die Registry besitzt.
+        - Aufrufe behalten die Form InfoLieferant.xxx(); es braucht
+          keinen neuen Import und keine Aenderung an __all__.
+        Nachteile:
+        - Die Methode wird an alle Unterklassen vererbt, obwohl sie nicht
+          zu deren eigenem Verhalten gehoert. Das erschwert das
+          Verstaendnis der Klassenstruktur und birgt das Risiko
+          versehentlicher Ueberschreibungen.
+
+    (b) Modulfunktion komponente_aus_dict() unter der Klasse:
+        Vorteile:
+        - Die Funktion wird nicht vererbt. Ihre Position zeigt, dass sie
+          komponentenuebergreifend arbeitet und kein Verhalten einer
+          einzelnen Komponente ist.
+        Nachteile:
+        - Die Funktion greift von aussen auf InfoLieferant.registry zu
+          und ist damit an ein Implementierungsdetail der Klasse
+          gekoppelt.
+        - Als zusaetzliche Funktion erweitert sie die oeffentliche API
+          des Pakets, sofern sie ueber __all__ exportiert wird.
+
+    Gewaehlt: (b). Zu entscheiden, welche Klasse aus einem dict gebaut
+    wird, ist eine eigene Verantwortung neben dem Verhalten der einzelnen
+    Komponente (Single Responsibility Principle). Die Modulfunktion trennt
+    beides, vermeidet unnoetige Vererbung und macht die Zustaendigkeit fuer
+    andere Entwickler leichter nachvollziehbar.
+    """
+    typ = daten.get("typ")
+    if not isinstance(typ, str):
+        raise UnbekannteKomponenteError(
+            f"Komponente ohne Typmarker: {daten!r}"
+        )
+    try:
+        klasse = InfoLieferant.registry[typ]
+    except KeyError:
+        raise UnbekannteKomponenteError(
+            f"Unbekannte Komponente: {typ!r}. "
+            f"Bekannt: {sorted(InfoLieferant.registry)}"
+        ) from None
+    return klasse.aus_felder(daten)
 
 
 # ============================================================================

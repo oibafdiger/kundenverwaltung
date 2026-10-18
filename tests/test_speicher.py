@@ -112,6 +112,35 @@ def test_beide_implementierungen_liefern_dasselbe(
     assert "Rueckruf" in info
 
 
+def test_entfernen_nimmt_die_notizen_mit_und_hinterlaesst_keine_waise(
+    speicher_varianten: dict[str, Speicher]
+) -> None:
+    """Ueber entfernen() gehen die Notizen mit dem Kunden-Objekt mit, in allen
+    drei Speichern. Waisen entstehen nur, wenn ein Kunde von aussen
+    verschwindet (test_waisen_werden_gemeldet_und_aufbewahrt)."""
+    for name, speicher in speicher_varianten.items():
+        # Schritt 1: Anna (mit Notiz "Rueckruf") und Bob anlegen, Annas Nummer merken.
+        with KundenDatei(speicher) as kunden:
+            anna = Kunde("Anna", "anna@example.de")
+            anna.komponente_hinzufuegen(Notiz("Rueckruf"))
+            kunden.hinzufuegen(anna)
+            kunden.hinzufuegen(Kunde("Bob", "bob@example.de"))
+
+            nummer = anna.nummer
+
+        # Schritt 2: neu laden, Anna ueber ihre Nummer entfernen.
+        with KundenDatei(speicher) as kunden:
+            kunden.entfernen(nummer)
+
+
+        # Schritt 3: neu laden und pruefen.
+        verwalter = KundenDatei(speicher)
+        with verwalter as kunden:
+            assert [k.name for k in kunden] == ["Bob"], name
+            assert verwalter.waisen == [], name
+            assert speicher.laden().speicher.fuer(nummer) == [], name
+
+
 # --- InMemorySpeicher ist nicht nachsichtiger ------------------------------
 
 def test_in_memory_baut_beim_laden_neu() -> None:

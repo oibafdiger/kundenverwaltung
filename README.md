@@ -49,7 +49,7 @@ pytest -m "not langsam"      # ohne die zwei Subprozess-Tests, ~1,6 s
 mypy                         # streng, Einstellungen in pyproject.toml
 ```
 
-Voraussetzung ist Python 3.12.
+Voraussetzung ist Python 3.14.
 
 ## Aufbau
 
@@ -174,6 +174,7 @@ Dateizugriff liegt seitdem in `speicher.py`; die Container halten nur noch.
 ```
 KundenverwaltungError
 ├── KundeNichtGefundenError
+├── DoppeltKundennummerError
 ├── UnbekannteKomponenteError
 ├── UngueltigeEmailError
 ├── UngueltigerNameError
@@ -378,7 +379,8 @@ dazu, fast eine Kopie mit anderem Treiber, und `umsatz` würde `NUMERIC`.
 `Kundenliste` unterstützt `len()`, Indexzugriff, `in`, `for` und Slicing. Ein
 Ausschnitt ist wieder eine `Kundenliste`, per `@overload` typisiert. Der
 Container erbt **nicht** von `list`, sonst wären `append`, `sort` und `clear`
-alle mit dabei. `hinzufuegen()` ist der einzige Schreibzugriff.
+alle mit dabei. `hinzufuegen()` und `entfernen()` sind die einzigen
+Schreibzugriffe.
 
 ## Tests
 

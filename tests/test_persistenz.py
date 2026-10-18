@@ -29,6 +29,7 @@ from kundenverwaltung import (
     PrivatDaten,
     json_atomar_schreiben,
     kunden_datei,
+    DoppeltKundennummerError
 )
 
 # Rechte-Tests brauchen Unix-Rechte und duerfen nicht als root laufen —
@@ -127,6 +128,18 @@ def test_fehlende_datei(tmp_path: Path) -> None:
 def test_verzeichnis_statt_datei(tmp_path: Path) -> None:
     with pytest.raises(DateiNichtLesbarError):
         JSONSpeicher(str(tmp_path)).laden()
+
+
+def test_doppelte_nummer_in_der_datei(tmp_path: Path) -> None:
+    """JSON mit doppelter nummer erzeugen und versucht zu laden."""
+    pfad = tmp_path / "alt.json"
+    pfad.write_text(json.dumps({"version": 2, "kunden": [
+        {"name": "A", "email": "a@example.de", "nummer": 4711, "zustand": 'aktiv'},
+        {"name": "B", "email": "b@example.de", "nummer": 4711, "zustand": 'aktiv'},
+    ]}), encoding="utf-8")
+
+    with pytest.raises(DoppeltKundennummerError):
+        JSONSpeicher(str(pfad)).laden()
 
 
 @pytest.mark.parametrize(
