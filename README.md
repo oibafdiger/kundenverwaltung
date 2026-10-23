@@ -1,5 +1,7 @@
 # Kundenverwaltung
 
+[![Tests](https://github.com/oibafdiger/kundenverwaltung/actions/workflows/tests.yml/badge.svg)](https://github.com/oibafdiger/kundenverwaltung/actions/workflows/tests.yml)
+
 Eine objektorientierte Kundenverwaltung in Python, entstanden als
 Lernprojekt, das über zwölf Wochen schrittweise gewachsen ist. Der Fokus liegt
 nicht auf dem Funktionsumfang, sondern auf den Designentscheidungen: warum
