@@ -51,6 +51,7 @@ from .speicher import (
 )
 from .sql_speicher import (
     KundeImOrt,
+    KundeUeberZustandsdurchschnitt,
     NotizAnzahl,
     SQLiteSpeicher,
     WaisenAnzahl,
@@ -82,6 +83,7 @@ __all__ = [
     "DoppeltKundennummerError",
     "Kundenliste",
     "KundenlisteIterator",
+    "KundeUeberZustandsdurchschnitt",
     "KundenverwaltungError",
     "KundenZustand",
     "Notiz",

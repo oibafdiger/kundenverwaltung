@@ -90,6 +90,14 @@ class WaisenAnzahl(NamedTuple):
     notizen: int
 
 
+class KundeUeberZustandsdurchschnitt(NamedTuple):
+    nummer: int
+    name: str
+    zustand: str
+    umsatz: float
+    durchschnitt: float
+
+
 class _KomponentenTabelle(NamedTuple):
     """Wie eine Komponentenklasse auf ihre Tabelle abgebildet wird."""
 
@@ -346,6 +354,39 @@ class SQLiteSpeicher(Speicher):
             "ORDER BY zustand"
         )
         return [ZustandUmsatz(*zeile) for zeile in zeilen]
+
+    def kunden_ueber_zustandsschnitt(self) -> list[KundeUeberZustandsdurchschnitt]:
+        """Kunden, deren Umsatz ueber dem Durchschnitt IHRES Zustands liegt.
+
+        Eine CTE rechnet den Durchschnitt einmal pro Zustand aus, der JOIN
+        ueber zustand gibt jedem Kunden den Schnitt seiner Gruppe mit. Die
+        korrelierte Fassung (Unterabfrage pro Kunde) liefert dasselbe (in
+        1.10a mit EXCEPT in beide Richtungen bewiesen), braucht den Schnitt
+        aber im SELECT und im WHERE, also zweimal. Mit dem SELECT-Alias im
+        WHERE ginge es kuerzer, aber nur in SQLite, nicht in PostgreSQL.
+
+        Strikt groesser: Ein Kunde, der allein in seinem Zustand ist, ist sein
+        eigener Schnitt und taucht nie auf, ebenso jeder Kunde genau auf dem
+        Schnitt. Sortiert nach Zustand, innerhalb davon der hoechste Umsatz
+        zuerst, zuletzt nach Nummer, damit die Reihenfolge eindeutig ist.
+        """
+        zeilen = self._abfragen(
+            """
+                WITH durchschnitt_pro_zustand AS (
+                    SELECT zustand, avg(umsatz) AS durchschnitt
+                    FROM kunden
+                    GROUP BY zustand
+                )
+                SELECT
+                    k.nummer, k.name, k.zustand, k.umsatz, dpz.durchschnitt
+                FROM kunden AS k
+                JOIN durchschnitt_pro_zustand AS dpz
+                    ON k.zustand = dpz.zustand
+                WHERE k.umsatz > dpz.durchschnitt
+                ORDER BY k.zustand, k.umsatz DESC, k.nummer
+            """
+        )
+        return [KundeUeberZustandsdurchschnitt(*zeile) for zeile in zeilen]
 
     def waisen_uebersicht(self) -> list[WaisenAnzahl]:
         """Welche geloeschten Kundennummern haben noch wie viele Notizen?

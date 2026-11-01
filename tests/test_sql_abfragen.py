@@ -14,6 +14,9 @@ Ein Test, der sein Soll mit derselben Logik ausrechnet wie der Code, prueft
 nur, ob die Logik mit sich selbst uebereinstimmt.
 """
 
+from kundenverwaltung.kunde import Kunde
+
+from kundenverwaltung.notizen import NotizSpeicher
 from pathlib import Path
 
 import pytest
@@ -22,6 +25,7 @@ from kundenverwaltung import (
     Adresse,
     Kunde,
     KundeImOrt,
+    KundeUeberZustandsdurchschnitt,
     Kundenliste,
     Notiz,
     NotizAnzahl,
@@ -99,6 +103,59 @@ def test_umsatz_pro_zustand(speicher: SQLiteSpeicher) -> None:
     ]
 
 
+@pytest.fixture
+def speicher_zustandsschnitte(tmp_path: Path) -> SQLiteSpeicher:
+    """Kleiner Kundenbestand zum Testen der Durchschnittsumsätze pro Zustand.
+
+        nummer  name   zustand   umsatz
+        1       Anna   aktiv     100      <- a) allein im Zustand: Umsatz = Schnitt, darf wegen strikt > nicht erscheinen
+        2       Bernd  inaktiv    50      <- zieht den Schnitt von inaktiv nach unten
+        3       Clara  inaktiv   100      <- zieht den Schnitt von inaktiv nach unten
+        4       David  inaktiv   150      <- b) über dem Schnitt des Zustands (125), nicht über dem Gesamtschnitt
+                                          <- c) über dem Schnitt
+        5       Eva    inaktiv   200      <- c) zweiter Kunde über dem Schnitt: Umsatz-Sortierung DESC muss wirken
+        6       Frank  gesperrt  100
+        7       Greta  gesperrt  300      <- b) über dem Gesamtschnitt, aber nicht über dem Schnitt des Zustands
+                                          <- d) genau auf dem Schnitt (300), darf wegen > nicht erscheinen (nicht >=)
+        8       Hans   gesperrt  500      <- in beiden Ergebnissen
+
+    Schnitt pro Zustand: aktiv 100, inaktiv 125, gesperrt 300
+    Darüber:             David (150), Eva (200), Hans (500)
+    Gesamtschnitt 187,5: Eva, Greta, Hans (b: David fehlt, Greta kommt dazu)
+    """
+    anna = _kunde(1, "Anna", None, 100, 0)
+    bernd = _kunde(2, "Bernd", None, 50, 0)
+    bernd.deaktivieren()
+    clara = _kunde(3, "Clara", None, 100, 0)
+    clara.deaktivieren()
+    david: Kunde = _kunde(4, "David", None, 150, 0)
+    david.deaktivieren()
+    eva = _kunde(5, "Eva", None, 200, 0)
+    eva.deaktivieren()
+    frank = _kunde(6, "Frank", None, 100, 0)
+    frank.sperren()
+    greta = _kunde(7, "Greta", None, 300, 0)
+    greta.sperren()
+    hans = _kunde(8, "Hans", None, 500, 0)
+    hans.sperren()
+    kunden = Kundenliste([
+        anna, bernd, clara, david, eva, frank, greta, hans
+    ])
+    waisen: NotizSpeicher = NotizSpeicher({})
+
+    speicher = SQLiteSpeicher(str(tmp_path / "kunden.db"))
+    speicher.speichern(kunden, waisen, [])
+    return speicher
+
+
+def test_kunden_ueber_zustandsschnitt(speicher_zustandsschnitte: SQLiteSpeicher) -> None:
+    assert speicher_zustandsschnitte.kunden_ueber_zustandsschnitt() == [
+        KundeUeberZustandsdurchschnitt(8, "Hans", "gesperrt", 500.0, 300.0),
+        KundeUeberZustandsdurchschnitt(5, "Eva", "inaktiv", 200.0, 125.0),
+        KundeUeberZustandsdurchschnitt(4, "David", "inaktiv", 150.0, 125.0),
+    ]
+
+
 def test_waisen_uebersicht(speicher: SQLiteSpeicher) -> None:
     assert speicher.waisen_uebersicht() == [WaisenAnzahl(77, 2), WaisenAnzahl(88, 1)]
 
@@ -114,3 +171,5 @@ def test_abfrage_ohne_datei_ist_leer_und_legt_nichts_an(tmp_path: Path) -> None:
     speicher = SQLiteSpeicher(str(pfad))
     assert speicher.notizen_pro_kunde() == []
     assert not pfad.exists()
+
+
